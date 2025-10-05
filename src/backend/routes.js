@@ -867,7 +867,7 @@ router.get("/proxy", async (req, res) => {
           {
             responseType: "arraybuffer",
             headers: {
-              Referer: "https://megacloud.club/",
+              Referer: "https://megacloud.blog/",
               "User-Agent":
                 "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36",
               Accept: "*/*",
