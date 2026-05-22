@@ -8,7 +8,10 @@ const fs = require("fs");
 const router = express.Router();
 
 // functions
-const { ensureDirectoryExists } = require("./utils/DirectoryMaker");
+const {
+  ensureDirectoryExists,
+  getDownloadsFolder,
+} = require("./utils/DirectoryMaker");
 const {
   downloadAnimeSingle,
   downloadAnimeMulti,
@@ -40,6 +43,7 @@ const {
   FindMapping,
   getSourceById,
   MalPage,
+  db,
 } = require("./utils/Metadata");
 
 // ===================== API routes =====================
@@ -187,7 +191,7 @@ router.post("/api/download/:AnimeManga/:singleMulti", async (req, res) => {
           ep,
           number,
           Title,
-          true
+          true,
         );
       } else if (singleMulti === "Multi") {
         let { id, Episodes, Title, SubDub, provider } = req.body;
@@ -196,7 +200,7 @@ router.post("/api/download/:AnimeManga/:singleMulti", async (req, res) => {
           id,
           Episodes,
           Title,
-          SubDub
+          SubDub,
         );
       }
     } else if (AnimeManga === "Manga") {
@@ -208,7 +212,7 @@ router.post("/api/download/:AnimeManga/:singleMulti", async (req, res) => {
           ep,
           number,
           Title,
-          true
+          true,
         );
       } else if (singleMulti === "Multi") {
         let { id, Chapters, Title, provider } = req.body;
@@ -264,7 +268,7 @@ router.post("/api/list/:AnimeManga/:provider/", async (req, res) => {
         data = await getAllMetadata(
           "Anime",
           config?.CustomDownloadLocation,
-          filters?.page
+          filters?.page,
         );
       } else if (provider === "mal") {
         data = await MalPage(config.Animeprovider, filters?.page);
@@ -282,7 +286,7 @@ router.post("/api/list/:AnimeManga/:provider/", async (req, res) => {
         data = await getAllMetadata(
           "Manga",
           config?.CustomDownloadLocation,
-          filters?.page
+          filters?.page,
         );
       } else if (provider === "provider") {
         const provider = await providerFetch("Manga");
@@ -297,7 +301,7 @@ router.post("/api/list/:AnimeManga/:provider/", async (req, res) => {
     return res.json(data);
   } catch (err) {
     logger.error(
-      `Failed To Fetch ${provider} ${AnimeManga} page ${filters?.page}`
+      `Failed To Fetch ${provider} ${AnimeManga} page ${filters?.page}`,
     );
     logger.error(`Error message: ${err.message}`);
     logger.error(`Stack trace: ${err.stack}`);
@@ -333,7 +337,7 @@ router.post("/api/info/:AnimeManga/:LocalMalProvider", async (req, res) => {
           AnimeManga,
           id,
           null,
-          setting.CustomDownloadLocation
+          setting.CustomDownloadLocation,
         );
         if (AnimeLocalInfo) {
           if (AnimeLocalInfo?.genres) {
@@ -359,7 +363,7 @@ router.post("/api/info/:AnimeManga/:LocalMalProvider", async (req, res) => {
           Animeprovider,
           setting?.CustomDownloadLocation,
           id,
-          data?.provider ? false : true
+          data?.provider ? false : true,
         );
 
         data = {
@@ -379,7 +383,7 @@ router.post("/api/info/:AnimeManga/:LocalMalProvider", async (req, res) => {
     return res.json(data);
   } catch (err) {
     logger.error(
-      `Failed To Fetch ${LocalMalProvider} ${AnimeManga} with AnimeID : '${id}'`
+      `Failed To Fetch ${LocalMalProvider} ${AnimeManga} with AnimeID : '${id}'`,
     );
     logger.error(`Error message: ${err.message}`);
     logger.error(`Stack trace: ${err.stack}`);
@@ -446,7 +450,7 @@ router.post("/downloads", async (req, res) => {
     Response.totalSegments = itemWithSegments.totalSegments;
     Response.currentSegments = itemWithSegments.currentSegments;
     Response.queue = queue.filter(
-      (item) => item?.epid !== itemWithSegments?.epid
+      (item) => item?.epid !== itemWithSegments?.epid,
     );
   }
 
@@ -535,7 +539,7 @@ router.post("/api/watch", async (req, res) => {
         "Anime",
         config?.CustomDownloadLocation,
         ep,
-        epNum
+        epNum,
       );
 
       // url
@@ -645,7 +649,7 @@ router.post("/api/read", async (req, res) => {
         "Manga",
         config?.CustomDownloadLocation,
         MangaID,
-        chapterID
+        chapterID,
       );
 
       if (SourcesData?.filepath) {
@@ -661,7 +665,7 @@ router.post("/api/read", async (req, res) => {
               img: `data:image/jpeg;base64,${await zip
                 .file(file)
                 .async("base64")}`,
-            }))
+            })),
         );
         res.json(pages);
       } else {
@@ -791,7 +795,7 @@ router.get("/setting", async (req, res) => {
   try {
     const setting = await settingfetch();
     let url = null;
-    
+
     const settingsWithProviders = {
       ...setting,
       providers: {
@@ -806,7 +810,10 @@ router.get("/setting", async (req, res) => {
 
     if (!setting.mal_on_off || setting.mal_on_off === null) {
       url = await MalCreateUrl();
-      return res.render("settings.ejs", { settings: settingsWithProviders, url: url });
+      return res.render("settings.ejs", {
+        settings: settingsWithProviders,
+        url: url,
+      });
     }
     res.render("settings.ejs", {
       settings: settingsWithProviders,
@@ -851,6 +858,8 @@ router.get("/info/:AnimeManga/:LocalMalProvider", async (req, res) => {
     logger.error(`Stack trace: ${err.stack}`);
     res.render("error.ejs", {
       error: err.message,
+      type: AnimeManga,
+      id: id,
     });
   }
 });
@@ -876,7 +885,7 @@ router.get("/proxy", async (req, res) => {
               Accept: "*/*",
               Connection: "keep-alive",
             },
-          }
+          },
         );
 
         const contentType = response.headers["content-type"];
@@ -890,7 +899,7 @@ router.get("/proxy", async (req, res) => {
 
           m3u8Data = m3u8Data.replace(
             /^https?:\/\/.*$/gm,
-            (match) => `/proxy?hianime=${encodeURIComponent(match)}`
+            (match) => `/proxy?hianime=${encodeURIComponent(match)}`,
           );
 
           return res.send(m3u8Data);
@@ -912,7 +921,99 @@ router.get("/proxy", async (req, res) => {
 router.get("/error", async (req, res) => {
   return res.render("error.ejs", {
     error: req?.query?.message ?? "Internal Error",
+    id: req?.query?.id,
+    type: req?.query?.type,
   });
+});
+
+// Delete Local Database Entry
+router.post("/api/local/remove", async (req, res) => {
+  try {
+    const { id, type } = req.body;
+    if (!id || !type) throw new Error("ID or Type is missing");
+
+    const setting = await settingfetch();
+    const baseDir = setting?.CustomDownloadLocation || await getDownloadsFolder();
+    let typeDir = path.join(baseDir, type, id);
+
+    if (!fs.existsSync(typeDir)) {
+      try {
+        const downloads = db.prepare(`SELECT * FROM ${type} WHERE id = ?`).all(id);
+        if (downloads && downloads.length > 0) {
+          const folderName = downloads[0].folder_name || downloads[0].title?.replace(/[^a-zA-Z0-9]/g, "_");
+          typeDir = path.join(baseDir, type, folderName);
+        }
+      } catch (e) {
+        // ignore db errors
+      }
+    }
+
+    if (fs.existsSync(typeDir)) {
+      await fs.promises.rm(typeDir, { recursive: true, force: true });
+    }
+
+    const { fetchAndUpdateMappingDatabase, MetadataRemove } = require("./utils/Metadata");
+    await MetadataRemove(type, id);
+    await fetchAndUpdateMappingDatabase(type, baseDir);
+
+    return res.json({ error: false, message: "Deleted successfully" });
+  } catch (err) {
+    logger.error(`Error deleting local entry: ${err.message}`);
+    return res.json({ error: true, message: err.message });
+  }
+});
+
+// Delete Local Episode
+router.post("/api/local/delete-episode", async (req, res) => {
+  try {
+    const { id, epnum, subdub } = req.body;
+    if (!id || !epnum || !subdub) throw new Error("Missing parameters");
+
+    const setting = await settingfetch();
+    const baseDir =
+      setting?.CustomDownloadLocation || (await getDownloadsFolder());
+    let typeDir = path.join(baseDir, "Anime", id);
+
+    if (!fs.existsSync(typeDir)) {
+      const idStripped = id.replace(/-(dub|sub|both)$/, "");
+      const downloads = db
+        .prepare("SELECT * FROM Anime WHERE id = ?")
+        .all(`${idStripped}-${subdub}`);
+      if (downloads && downloads.length > 0) {
+        const folderName =
+          downloads[0].folder_name ||
+          downloads[0].title?.replace(/[^a-zA-Z0-9]/g, "_");
+        typeDir = path.join(baseDir, "Anime", folderName);
+      }
+    }
+
+    if (fs.existsSync(typeDir)) {
+      const files = await fs.promises.readdir(typeDir);
+
+      const filesToDelete = files.filter((file) => {
+        const match = file.match(/^(\d+)Ep\./);
+        if (match) {
+          const num = parseInt(match[1]);
+          if (num == epnum) return true;
+        }
+        return false;
+      });
+
+      if (filesToDelete.length > 0) {
+        for (const fileToDelete of filesToDelete) {
+          await fs.promises.unlink(path.join(typeDir, fileToDelete));
+        }
+        return res.json({ error: false, message: "Episode deleted" });
+      } else {
+        throw new Error("Episode file not found");
+      }
+    } else {
+      throw new Error("Anime folder not found on disk");
+    }
+  } catch (err) {
+    logger.error(`Error deleting episode: ${err.message}`);
+    return res.json({ error: true, message: err.message });
+  }
 });
 
 // MarketPlace

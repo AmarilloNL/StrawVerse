@@ -212,6 +212,10 @@ input[type="number"]::-webkit-outer-spin-button {
   border-radius: 8px;
 }
 
+#anime-filters:empty {
+  display: none;
+}
+
 .filter-group {
   display: flex;
   flex-direction: column;

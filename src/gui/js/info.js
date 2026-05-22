@@ -90,7 +90,7 @@ async function init(typeInput, ApiInfoInput, IDInput, LoadNextChapterInput) {
   if (AnimeInfoData?.error) {
     window.location.href = `/error?message=${encodeURIComponent(
       AnimeInfoData?.message ?? "Internal Error"
-    )}`;
+    )}&id=${encodeURIComponent(id)}&type=${encodeURIComponent(type)}`;
     return;
   }
 
@@ -178,12 +178,14 @@ async function AddInfo(data) {
   </div>
 
   <div class="flex-container">
-        <div class="watch-sync-container">
+        <div class="watch-sync-container" style="display: inline-flex;">
             <button
                 id="watch-read-download-tongle"
                 class="btn btn-outline-info"
                 onclick="toggleDownloadWatchRead()"
+                style="${window.LocalAnimeManga ? 'border-top-right-radius: 0; border-bottom-right-radius: 0; margin-right: 0;' : ''}"
             >${type === "Anime" ? "Watch" : "Read"}</button>
+            ${window.LocalAnimeManga ? `<button class="btn btn-outline-info" onclick="RemoveLocalData('${id}', '${type}')" style="border-top-left-radius: 0; border-bottom-left-radius: 0; border-left: 1px solid rgba(0,0,0,0.2); margin-left: 0; padding: 0 15px;" title="Remove Local Data"><span class="material-symbols-rounded" style="font-size: 20px; vertical-align: middle;">delete</span></button>` : ''}
         </div>
   </div>
 `;
@@ -423,7 +425,7 @@ async function EpisodeFetch(page = 1) {
   if (data?.error) {
     window.location.href = `/error?message=${encodeURIComponent(
       data?.message ?? "Internal Error"
-    )}`;
+    )}&id=${encodeURIComponent(AnimeMangaepid || id)}&type=${encodeURIComponent(type)}`;
     return;
   }
 
@@ -491,7 +493,7 @@ async function ChapterFetch() {
   if (data?.error) {
     window.location.href = `/error?message=${encodeURIComponent(
       data?.message ?? "Internal Error"
-    )}`;
+    )}&id=${encodeURIComponent(AnimeMangaepid || id)}&type=${encodeURIComponent(type)}`;
     return;
   }
 
@@ -626,31 +628,44 @@ async function HandleEpisodes(data) {
       const subEpisodes = (downloaded?.sub || [])
         .map(
           (ep) =>
-            `<button class="episode ${
+            `<div style="display:inline-flex; margin-right:5px; margin-bottom:5px;">
+              <button class="episode ${
               WatchedEp >= ep ? "episode_active" : ""
             }" epnum="${ep}" onclick="Videoplay('${id}', '${ep}', true, ${
               WatchedEp >= ep
-            })"> 
+            })" style="border-top-right-radius: 0; border-bottom-right-radius: 0; width: auto; padding-right: 15px;"> 
              Watch EP ${ep} (SUB)
-           </button>`
+           </button>
+           <button class="episode" onclick="Animedelete('${id}', '${ep}', 'sub')" style="border-top-left-radius: 0; border-bottom-left-radius: 0; border-left: 1px solid rgba(0,0,0,0.2); margin-left: 0; width: auto; padding: 0 10px;" title="Delete Episode">
+             <span class="material-symbols-rounded" style="font-size: 20px; vertical-align: middle;">delete</span>
+           </button>
+           </div>`
         )
         .join("");
 
-      const dubEpisodes = (downloaded?.dubs || [])
+      const dubEpisodes = (downloaded?.dub || [])
         .map(
           (ep) =>
-            `<button class="episode${
+            `<div style="display:inline-flex; margin-right:5px; margin-bottom:5px;">
+              <button class="episode${
               WatchedEp >= ep ? "episode_active" : ""
             }" epnum="${ep}" onclick="Videoplay('${id}', '${ep}', true, ${
               WatchedEp >= ep
-            })"> 
+            })" style="border-top-right-radius: 0; border-bottom-right-radius: 0; width: auto; padding-right: 15px;"> 
              Watch EP ${ep} (DUB)
-           </button>`
+           </button>
+           <button class="episode" onclick="Animedelete('${id}', '${ep}', 'dub')" style="border-top-left-radius: 0; border-bottom-left-radius: 0; border-left: 1px solid rgba(0,0,0,0.2); margin-left: 0; width: auto; padding: 0 10px;" title="Delete Episode">
+             <span class="material-symbols-rounded" style="font-size: 20px; vertical-align: middle;">delete</span>
+           </button>
+           </div>`
         )
         .join("");
 
       playDownloads.innerHTML = subEpisodes + dubEpisodes;
     }
+  } else {
+    const playFromDownloads = document.getElementById("playfromdownloads");
+    if (playFromDownloads) playFromDownloads.style.display = "none";
   }
 
   // Watch : Online
@@ -1430,6 +1445,51 @@ async function DownloadApi(body, SingleMulti) {
   }
 }
 
+// Delete Episode
+function Animedelete(id, epnum, subdub) {
+  Swal.fire({
+    title: "Are you sure?",
+    text: `Do you really want to delete episode ${epnum} (${subdub.toUpperCase()}) from your downloads?`,
+    icon: "warning",
+    showCancelButton: true,
+    confirmButtonColor: "#d33",
+    cancelButtonColor: "#3085d6",
+    confirmButtonText: "Yes, delete it!"
+  }).then((result) => {
+    if (result.isConfirmed) {
+      if (typeof player !== 'undefined' && player && typeof ep !== 'undefined' && ep == epnum) {
+        try { player.reset(); } catch(e) {}
+      }
+      fetch("/api/local/delete-episode", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: id, epnum: epnum, subdub: subdub })
+      })
+      .then(res => res.json())
+      .then(data => {
+        if (data.error) {
+          Swal.fire("Error!", data.message, "error");
+        } else {
+          if (AnimeInfoData?.DownloadedEpisodes?.[subdub]) {
+            AnimeInfoData.DownloadedEpisodes[subdub] = AnimeInfoData.DownloadedEpisodes[subdub].filter(e => e != epnum);
+          }
+          HandleEpisodes(AnimeInfoData);
+          Swal.fire({
+            title: "Deleted!",
+            text: "Episode deleted successfully.",
+            icon: "success",
+            timer: 1500,
+            showConfirmButton: false
+          });
+        }
+      })
+      .catch(err => {
+        Swal.fire("Error!", "Failed to delete episode.", "error");
+      });
+    }
+  });
+}
+
 async function HandleMalButtonClick() {
   let status = document.getElementById("mal-status").value;
   let episodeCount = document.getElementById("mal-currently-watched");
@@ -1495,4 +1555,38 @@ function DiscordRPC(Type, EpChapter) {
     `${Type} ${document.title.split("|").slice(1).join(" ").trim()}`,
     EpChapter ? `${EpChapter}` : "thinking..."
   );
+}
+
+// Remove Local Data
+function RemoveLocalData(id, type) {
+  Swal.fire({
+    title: "Are you sure?",
+    text: "This will delete all downloaded files and remove the entry from your database.",
+    icon: "warning",
+    showCancelButton: true,
+    confirmButtonColor: "#d33",
+    cancelButtonColor: "#3085d6",
+    confirmButtonText: "Yes, remove it!"
+  }).then((result) => {
+    if (result.isConfirmed) {
+      fetch("/api/local/remove", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, type }),
+      })
+        .then((res) => res.json())
+        .then((data) => {
+          if (data.error) {
+            Swal.fire("Error!", data.message, "error");
+          } else {
+            Swal.fire("Deleted!", "Local data removed successfully.", "success").then(() => {
+              window.location.href = "/";
+            });
+          }
+        })
+        .catch((err) => {
+          Swal.fire("Error!", "An unexpected error occurred.", "error");
+        });
+    }
+  });
 }

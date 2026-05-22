@@ -95,7 +95,7 @@ function updateTableSchema(tableName, expectedColumns) {
     });
   } catch (error) {
     throw new Error(
-      `Error updating table schema for ${tableName}: ${error.message}`
+      `Error updating table schema for ${tableName}: ${error.message}`,
     );
   }
 }
@@ -120,7 +120,7 @@ async function MetadataAdd(type, valuesToAdd) {
         });
 
         valuesToAdd.image = `data:image/png;base64,${Buffer.from(
-          response.data
+          response.data,
         ).toString("base64")}`;
       } catch (err) {
         logger.error(`Failed to fetch image from: ${Imageurl}`);
@@ -132,7 +132,7 @@ async function MetadataAdd(type, valuesToAdd) {
     if (valuesToAdd?.title) {
       valuesToAdd.folder_name = valuesToAdd?.title?.replace(
         /[^a-zA-Z0-9]/g,
-        "_"
+        "_",
       );
     }
 
@@ -163,7 +163,7 @@ async function MetadataAdd(type, valuesToAdd) {
       const values = Object.values(filteredValues);
 
       db.prepare(
-        `INSERT INTO ${type} (${fields}) VALUES (${placeholders})`
+        `INSERT INTO ${type} (${fields}) VALUES (${placeholders})`,
       ).run(...values);
     } catch (error) {
       throw new Error(`Error inserting into ${type}: ${error.message}`);
@@ -178,7 +178,10 @@ function MetadataRemove(type, id) {
   }
 
   try {
-    db.exec(`DELETE FROM ${type} WHERE id = '${id}'`);
+    db.prepare(`DELETE FROM ${type} WHERE id = ? OR folder_name = ?`).run(
+      id,
+      id,
+    );
   } catch (error) {
     throw new Error(`Error deleting from ${type}: ${error.message}`);
   }
@@ -233,7 +236,7 @@ async function getAllMetadata(type, baseDir, page = 1) {
       folders.map((alltitles) => {
         if (
           storedMetadata.some(
-            (meta_data) => meta_data.folder_name === alltitles
+            (meta_data) => meta_data.folder_name === alltitles,
           )
         )
           return;
@@ -252,7 +255,7 @@ async function getAllMetadata(type, baseDir, page = 1) {
       const startIndex = (page - 1) * limit;
       const paginatedMetadata = storedMetadata.slice(
         startIndex,
-        startIndex + limit
+        startIndex + limit,
       );
       const hasNextPage = page < totalPages;
 
@@ -277,10 +280,10 @@ async function getAllMetadata(type, baseDir, page = 1) {
               (file) =>
                 file.isFile() &&
                 file.name.endsWith(".mp4") &&
-                file.name.toLowerCase().includes("ep")
+                file.name.toLowerCase().includes("ep"),
             )
             .map((file) =>
-              parseInt(file?.name?.toLowerCase()?.split("ep")?.[0])
+              parseInt(file?.name?.toLowerCase()?.split("ep")?.[0]),
             )
             .filter(Boolean)
             .sort((a, b) => a - b);
@@ -290,15 +293,15 @@ async function getAllMetadata(type, baseDir, page = 1) {
               (file) =>
                 file.isFile() &&
                 file.name.endsWith(".cbz") &&
-                file.name.toLowerCase().includes("chapter")
+                file.name.toLowerCase().includes("chapter"),
             )
             .map((file) =>
               parseInt(
                 file?.name
                   ?.toLowerCase()
                   ?.split("chapter")?.[1]
-                  ?.split(".cbz")[0]
-              )
+                  ?.split(".cbz")[0],
+              ),
             )
             .filter(Boolean)
             .sort((a, b) => a - b);
@@ -399,12 +402,12 @@ async function getSourceById(type, baseDir, id, number) {
         .filter(
           (file) =>
             (file.endsWith(".srt") || file.endsWith(".vtt")) &&
-            file?.startsWith(`${number}Ep.`)
+            file?.startsWith(`${number}Ep.`),
         )
         .map((subtitle) => {
           return {
             url: `/subtitles?file=${encodeURIComponent(
-              path.join(subtitlesDir, subtitle)
+              path.join(subtitlesDir, subtitle),
             )}`,
             lang: subtitle.split(".")[1],
           };
@@ -425,7 +428,7 @@ function getMappingLastRun() {
   try {
     const row = db
       .prepare(
-        "SELECT last_ran, last_fetched FROM last_ran_Mapping WHERE id = 1"
+        "SELECT last_ran, last_fetched FROM last_ran_Mapping WHERE id = 1",
       )
       .get();
     return {
@@ -459,11 +462,11 @@ function SaveMappingDatabase(data, last_ran) {
   db.exec(
     `CREATE TABLE Mapping (${Object.entries(tables.Mapping)
       .map(([col, definition]) => `${col} ${definition}`)
-      .join(", ")});`
+      .join(", ")});`,
   );
   db.exec("DELETE FROM sqlite_sequence WHERE name = 'Mapping';");
   const insert = db.prepare(
-    `INSERT INTO Mapping (MalID , AnimeKai, HiAnime, AnimePahe, NextEpisodes) VALUES (?, ?, ?, ?, ?)`
+    `INSERT INTO Mapping (MalID , AnimeKai, HiAnime, AnimePahe, NextEpisodes) VALUES (?, ?, ?, ?, ?)`,
   );
 
   const insertMany = db.transaction((entries) => {
@@ -473,7 +476,7 @@ function SaveMappingDatabase(data, last_ran) {
         JSON.stringify(entry?.AnimeKai || []),
         JSON.stringify(entry?.HiAnime || []),
         JSON.stringify(entry?.AnimePahe || []),
-        JSON.stringify(entry?.NextEpisodes || [])
+        JSON.stringify(entry?.NextEpisodes || []),
       );
     }
   });
@@ -481,12 +484,13 @@ function SaveMappingDatabase(data, last_ran) {
   insertMany(data);
 
   db.prepare(
-    "INSERT OR REPLACE INTO last_ran_Mapping (id, last_ran, last_fetched) VALUES (1, ?, ?)"
+    "INSERT OR REPLACE INTO last_ran_Mapping (id, last_ran, last_fetched) VALUES (1, ?, ?)",
   ).run(last_ran, new Date().toISOString());
 }
 
 // fetch updates
 async function fetchAndUpdateMappingDatabase() {
+  return;
   const { last_ran, last_fetched } = getMappingLastRun();
 
   let timeDiffInHours = null;
@@ -533,7 +537,7 @@ async function FindMapping(type, AnimeMangaid, malid, dir) {
         if (!malid) {
           const FoundRow = db
             .prepare(
-              "SELECT * FROM Mapping WHERE AnimeKai LIKE ? OR HiAnime LIKE ? OR AnimePahe LIKE ?"
+              "SELECT * FROM Mapping WHERE AnimeKai LIKE ? OR HiAnime LIKE ? OR AnimePahe LIKE ?",
             )
             .get(`%${id}%`, `%${id}%`, `%${id}%`);
 
@@ -554,8 +558,8 @@ async function FindMapping(type, AnimeMangaid, malid, dir) {
               MalInfo?.totalEpisodes > 0
                 ? MalInfo.totalEpisodes
                 : MalInfo?.lastEpisode
-                ? MalInfo.lastEpisode
-                : 0,
+                  ? MalInfo.lastEpisode
+                  : 0,
             lastEpisode: MalInfo.lastEpisode ?? null,
             watched: MalInfo.watched ?? 0,
             status: MalInfo.status ?? "",
@@ -588,7 +592,7 @@ async function FindMapping(type, AnimeMangaid, malid, dir) {
             const folderPath = path.join(
               dir,
               "Anime",
-              `${SubDub.title?.replace(/[^a-zA-Z0-9]/g, "_")}`
+              `${SubDub.title?.replace(/[^a-zA-Z0-9]/g, "_")}`,
             );
 
             if (fs.existsSync(folderPath)) {
@@ -601,7 +605,7 @@ async function FindMapping(type, AnimeMangaid, malid, dir) {
                   (file) =>
                     file.isFile() &&
                     file.name.endsWith(".mp4") &&
-                    file.name.match(/\d+/)
+                    file.name.match(/\d+/),
                 )
                 .map((file) => parseInt(file.name.match(/\d+/)[0]))
                 .filter(Boolean)
@@ -633,7 +637,7 @@ async function FindMapping(type, AnimeMangaid, malid, dir) {
                 (file) =>
                   file.isFile() &&
                   file.name.endsWith(".mp4") &&
-                  file.name.match(/\d+/)
+                  file.name.match(/\d+/),
               )
               .map((file) => parseInt(file.name.match(/\d+/)[0]))
               .filter(Boolean)
@@ -664,10 +668,10 @@ async function FindMapping(type, AnimeMangaid, malid, dir) {
                 (file) =>
                   file.isFile() &&
                   file.name.endsWith(".cbz") &&
-                  file.name.toLowerCase().includes("chapter")
+                  file.name.toLowerCase().includes("chapter"),
               )
               .map((file) =>
-                parseInt(file.name.toLowerCase().split("chapter")[1])
+                parseInt(file.name.toLowerCase().split("chapter")[1]),
               )
               .filter(Boolean)
               .sort((a, b) => a - b);
@@ -698,12 +702,12 @@ async function MalEpMap(data = []) {
       .prepare(
         `SELECT * FROM MyAnimeList WHERE id IN (${ids
           .map(() => "?")
-          .join(",")})`
+          .join(",")})`,
       )
       .all(...ids);
 
     const existingMap = new Map(
-      existingEntries.map((entry) => [entry.id, entry])
+      existingEntries.map((entry) => [entry.id, entry]),
     );
 
     let NotChanged = false;
@@ -744,7 +748,7 @@ async function MalEpMap(data = []) {
           parseInt(entry.totalEpisodes ?? 0),
           parseInt(entry.watched ?? 0),
           entry.status,
-          entry.updated_at
+          entry.updated_at,
         );
       }
     });
@@ -774,7 +778,7 @@ async function processAndSortMyAnimeList() {
       .prepare(
         `SELECT MalID, NextEpisodes FROM Mapping WHERE MalID IN (${malIds
           .map(() => "?")
-          .join(",")})`
+          .join(",")})`,
       )
       .all(...malIds);
 
@@ -858,17 +862,17 @@ async function processAndSortMyAnimeList() {
         entry?.totalEpisodes > 0
           ? entry.totalEpisodes
           : entry?.lastEpisode
-          ? entry?.lastEpisode
-          : 0,
+            ? entry?.lastEpisode
+            : 0,
         entry.watched,
         index,
         entry?.lastDate ? String(entry.lastDate) : null,
-        entry.id
+        entry.id,
       );
     });
 
     db.prepare(
-      "INSERT OR REPLACE INTO last_ran_Mapping (id, last_Sync_Mal) VALUES (2, ?)"
+      "INSERT OR REPLACE INTO last_ran_Mapping (id, last_Sync_Mal) VALUES (2, ?)",
     ).run(new Date().toISOString());
 
     logger.info(`[MyAnimeList] Successfully Sorted!`);
@@ -890,14 +894,14 @@ async function MalPage(provider_name, page = 1) {
        WHERE status = 'watching' 
        AND sortOrder > 0 
        ORDER BY sortOrder 
-       LIMIT ? OFFSET ?`
+       LIMIT ? OFFSET ?`,
       )
       .all(limit, offset);
 
     let totalRecords =
       db
         .prepare(
-          `SELECT COUNT(*) AS total FROM MyAnimeList WHERE status = 'watching'`
+          `SELECT COUNT(*) AS total FROM MyAnimeList WHERE status = 'watching'`,
         )
         .get()?.total || 0;
 
@@ -911,7 +915,7 @@ async function MalPage(provider_name, page = 1) {
       .prepare(
         `SELECT MalID, AnimeKai, HiAnime, AnimePahe FROM Mapping WHERE MalID IN (${malIds
           .map(() => "?")
-          .join(",")})`
+          .join(",")})`,
       )
       .all(...malIds);
 
@@ -981,4 +985,5 @@ module.exports = {
   getMALLastSync,
   MalPage,
   FetchLocalProviderInfo,
+  db,
 };

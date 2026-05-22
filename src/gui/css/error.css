@@ -33,3 +33,20 @@ body {
   margin-bottom: 1.5rem;
   color: white;
 }
+
+.btn-outline-danger {
+  background-color: transparent;
+  color: #d9534f;
+  border: 2px solid #d9534f;
+  border-radius: 6px;
+  padding: 10px 20px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.btn-outline-danger:hover {
+  background-color: #d9534f;
+  color: white;
+}
