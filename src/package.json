@@ -1,11 +1,11 @@
 {
   "name": "strawverse",
-  "version": "5.0.3",
+  "version": "6.0.0",
   "description": "Download anime in batches & its fast :3",
   "main": "gui.js",
   "scripts": {
     "start": "electron . --trace-warnings",
-    "package": "electron-builder",
+    "package": "electron-builder --win --linux",
     "start:prod": "cross-env NODE_ENV=production electron .",
     "postinstall": "electron-builder install-app-deps"
   },
@@ -31,7 +31,14 @@
     "nsis": {
       "deleteAppDataOnUninstall": true
     },
-    "icon": "assets/luffy.ico",
+    "linux": {
+      "target": [
+        "AppImage",
+        "snap"
+      ],
+      "icon": "assets/luffy.png"
+    },
+    "icon": "assets/luffy.png",
     "compression": "maximum",
     "asarUnpack": [
       "node_modules/ffmpeg-static/**/*",

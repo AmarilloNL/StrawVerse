@@ -78,7 +78,12 @@ const createWindow = () => {
       webSecurity: false,
       preload: path.join(__dirname, "backend", "preload.js"),
     },
-    icon: path.join(__dirname, "./assets/luffy.ico"),
+    icon: path.join(
+      __dirname,
+      process.platform === "win32"
+        ? "./assets/luffy.ico"
+        : "./assets/luffy.png",
+    ),
     minWidth: 1000,
     minHeight: 750,
   });
@@ -207,8 +212,10 @@ const createWindow = () => {
     app.quit();
   });
 
-  // const menu = Menu.buildFromTemplate([]);
-  // Menu.setApplicationMenu(menu);
+  if (app.isPackaged) {
+    const menu = Menu.buildFromTemplate([]);
+    Menu.setApplicationMenu(menu);
+  }
 
   // max priority
   if (process.platform === "win32") {

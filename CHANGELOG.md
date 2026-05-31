@@ -1,5 +1,18 @@
 # Changelog
 
+## [6.0.0] - 2026-05-31
+
+- Added ability to delete individual downloaded episodes directly from the UI
+- Added option to remove local downloads and database entries entirely
+- Added new Anime provider **Anikoto** with Cloudflare bypass
+- Fixed **AnimePahe** downloader and streaming issues
+- Added new Manga provider **AllManga** to the marketplace
+- Fixed headers issue and bumped version for **WeebCentral** Manga provider
+- Added pagination, improved error handling, and new UI elements for Anime & Manga sections
+- Improved backend robustness to handle missing download directories and fallback provider configs
+- Updated site addresses and fixed routing issues
+- Added support and documentation for Linux (AppImage & Snap packaging) alongside Windows
+
 ## [5.0.3] - 2025-06-24
 
 - Added Changelogs

@@ -51,17 +51,26 @@ This is a Node.js-based anime & manga downloader that allows you to download ani
 
 ## Installation
 
-1. Go to [Anime-Manga Batch Downloader Releases](https://github.com/TheYogMehta/StrawVerse/releases)
-2. Download `StrawVerse.exe`
-3. Run it and enjoy
+### 💻 For Windows:
+1. Go to [StrawVerse Releases](https://github.com/TheYogMehta/StrawVerse/releases).
+2. Download the setup file `StrawVerse.Setup.<version>.exe`.
+3. Run the installer to install the application, and enjoy!
+
+### 🐧 For Linux:
+1. Go to [StrawVerse Releases](https://github.com/TheYogMehta/StrawVerse/releases).
+2. Download the AppImage `StrawVerse-<version>.AppImage` or the snap package.
+3. For AppImage: Make it executable using `chmod +x StrawVerse-<version>.AppImage` and run it.
+
+### 🍎 For Other OS (macOS, etc.):
+* Pre-built binaries are not currently provided. You can run the application by cloning the repository, installing the dependencies, and running it locally. See the **[Build the Application](#build-the-application)** section below for step-by-step instructions.
 
 ## Usage
 
-1. Run `StrawVerse.exe`.
+1. Run the application (`StrawVerse.exe` on Windows, or `StrawVerse.AppImage` / Snap on Linux).
 2. Search through the anime or manga list and download what you like.
-3. See progress in downloads.
-4. Anime episodes will be downloaded in the folder where you have stored `StrawVerse.exe`.
-5. Manga chapters will be saved as cbz files in the designated folder.
+3. See progress in the downloads tab.
+4. Anime episodes will be downloaded in the folder where you have stored/run the executable (or in your configured download directory).
+5. Manga chapters will be saved as `.cbz` files in your designated folder.
 
 ## Videos
 
@@ -84,6 +93,7 @@ This is a Node.js-based anime & manga downloader that allows you to download ani
 
 ## Uninstalling the Application
 
+### 💻 For Windows:
 To delete the application, navigate to the following directory:
 
 ```
@@ -91,6 +101,13 @@ C:\Users\USERNAME\AppData\Local\Programs\StrawVerse
 ```
 
 Then, run `Uninstall StrawVerse.exe`.
+
+### 🐧 For Linux:
+- **AppImage:** Simply delete the downloaded `.AppImage` file. If you want to clean up application configurations, delete the `~/.config/strawverse` directory.
+- **Snap:** Run the following command in your terminal:
+  ```bash
+  sudo snap remove strawverse
+  ```
 
 ---
 
@@ -147,7 +164,7 @@ Follow these steps to build application:
 
 ## Notes
 
-- Build: Creates an executable .exe file for Windows.
+- Build (package): Creates installer/executable files for Windows (`.exe`) and Linux (`.AppImage`, `.snap`) in the `dist` directory.
 - Start: Runs the app locally in the Electron environment without building an executable.
 - Ensure that your system has the latest versions of Node.js and Git installed for compatibility.
 - If you encounter any issues open an issue.
