@@ -1,5 +1,5 @@
 // libs
-const BetterSqlite3 = require("better-sqlite3");
+const { DatabaseSync } = require("node:sqlite");
 const { logger } = require("./AppLogger");
 const { app } = require("electron");
 const axios = require("axios");
@@ -8,7 +8,7 @@ const fs = require("fs");
 
 // Database creation [gets created in /user/your_name/AppData/Roaming]
 const userDataPath = app.getPath("userData");
-const db = new BetterSqlite3(path.join(userDataPath, "metadata.db"));
+const db = new DatabaseSync(path.join(userDataPath, "metadata.db"));
 
 const tables = {
   Anime: {
@@ -65,7 +65,6 @@ const tables = {
     last_fetched: "TEXT",
     last_Sync_Mal: "TEXT",
   },
-
 };
 
 // Create tables & update schema
@@ -474,8 +473,9 @@ function SaveMappingDatabase(data, last_ran) {
     `INSERT INTO Mapping (MalID , AnimeKai, HiAnime, AnimePahe, NextEpisodes) VALUES (?, ?, ?, ?, ?)`,
   );
 
-  const insertMany = db.transaction((entries) => {
-    for (const entry of entries) {
+  db.exec("BEGIN");
+  try {
+    for (const entry of data) {
       insert.run(
         String(entry?.MalId) || null,
         JSON.stringify(entry?.AnimeKai || []),
@@ -484,9 +484,11 @@ function SaveMappingDatabase(data, last_ran) {
         JSON.stringify(entry?.NextEpisodes || []),
       );
     }
-  });
-
-  insertMany(data);
+    db.exec("COMMIT");
+  } catch (e) {
+    db.exec("ROLLBACK");
+    throw e;
+  }
 
   db.prepare(
     "INSERT OR REPLACE INTO last_ran_Mapping (id, last_ran, last_fetched) VALUES (1, ?, ?)",
@@ -729,8 +731,9 @@ async function MalEpMap(data = []) {
         updated_at = excluded.updated_at
     `);
 
-    const insertMany = db.transaction((entries) => {
-      for (const entry of entries) {
+    db.exec("BEGIN");
+    try {
+      for (const entry of data) {
         const existing = existingMap.get(entry.id.toString());
 
         if (
@@ -756,9 +759,11 @@ async function MalEpMap(data = []) {
           entry.updated_at,
         );
       }
-    });
-
-    insertMany(data);
+      db.exec("COMMIT");
+    } catch (e) {
+      db.exec("ROLLBACK");
+      throw e;
+    }
 
     return NotChanged;
   } catch (err) {

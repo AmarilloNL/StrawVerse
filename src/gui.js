@@ -1,3 +1,9 @@
+// suppress node:sqlite experimental warning (intentional use)
+process.removeAllListeners("warning");
+process.on("warning", (w) => {
+  if (w.name !== "ExperimentalWarning") console.warn(w);
+});
+
 // electron
 const {
   app,
@@ -35,7 +41,7 @@ const {
   loadAllScrapers,
 } = require("./backend/utils/settings");
 const { loadQueue } = require("./backend/utils/queue");
-const { continuousExecution } = require("./backend/database");
+const { continuousExecution } = require("./backend/queueWorker");
 const { fetchAndUpdateMappingDatabase } = require("./backend/utils/Metadata");
 const { StopDiscordRPC } = require("./backend/utils/discord");
 const {
@@ -99,8 +105,8 @@ const createWindow = () => {
     },
     (details, callback) => {
       const url = details.url;
-      if (url.startsWith("https://i.animepahe.ru/")) {
-        details.requestHeaders["Referer"] = "https://animepahe.ru/";
+      if (url.startsWith("https://i.animepahe.pw/")) {
+        details.requestHeaders["Referer"] = "https://animepahe.pw/";
       } else if (url.startsWith("https://temp.compsci88.com/")) {
         details.requestHeaders["Referer"] = "https://weebcentral.com/";
       } else if (url.includes("owocdn.top") || url.includes("kwik.cx")) {
@@ -287,7 +293,7 @@ app.whenReady().then(async () => {
     }
   });
 
-  autoUpdater.checkForUpdatesAndNotify();
+  // autoUpdater.checkForUpdatesAndNotify();
 });
 
 app.on("will-quit", () => {

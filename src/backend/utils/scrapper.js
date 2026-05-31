@@ -25,9 +25,11 @@ function createScrapperWindow() {
       autoplayPolicy: "no-user-gesture-required",
     },
   });
-  
+
   const defaultUA = global.ScrapperWindow.webContents.userAgent;
-  global.ScrapperWindow.webContents.userAgent = defaultUA.replace(/Electron\/[\d\.]+ /g, '').replace(/strawverse\/[\d\.]+ /g, '');
+  global.ScrapperWindow.webContents.userAgent = defaultUA
+    .replace(/Electron\/[\d\.]+ /g, "")
+    .replace(/strawverse\/[\d\.]+ /g, "");
 
   global.ScrapperWindow.webContents.session.webRequest.onBeforeRequest(
     { urls: ["*://*/*"] },
@@ -36,7 +38,10 @@ function createScrapperWindow() {
         callback({ cancel: false });
         return;
       }
-      if (!details.url.startsWith("http://") && !details.url.startsWith("https://")) {
+      if (
+        !details.url.startsWith("http://") &&
+        !details.url.startsWith("https://")
+      ) {
         callback({ cancel: false });
         return;
       }
@@ -60,7 +65,8 @@ function createScrapperWindow() {
         details.url.includes("allmanga") ||
         details.url.includes("allanime") ||
         details.url.includes("youtube-anime") ||
-        details.url.includes("ytimgf")
+        details.url.includes("ytimgf") ||
+        details.url.includes("kwik")
       ) {
         callback({ cancel: false });
       } else {
@@ -73,16 +79,26 @@ function createScrapperWindow() {
     { urls: ["*://*/*"] },
     (details, callback) => {
       if (details.requestHeaders["User-Agent"]) {
-        details.requestHeaders["User-Agent"] = details.requestHeaders["User-Agent"].replace(/Electron\/[\d\.]+ /g, '').replace(/strawverse\/[\d\.]+ /g, '');
+        details.requestHeaders["User-Agent"] = details.requestHeaders[
+          "User-Agent"
+        ]
+          .replace(/Electron\/[\d\.]+ /g, "")
+          .replace(/strawverse\/[\d\.]+ /g, "");
       }
       if (details.requestHeaders["sec-ch-ua"]) {
-        details.requestHeaders["sec-ch-ua"] = details.requestHeaders["sec-ch-ua"].replace(/"Electron";v="[\d\.]+",?/g, '').replace(/,?\s*"Electron";v="[\d\.]+"/g, '');
+        details.requestHeaders["sec-ch-ua"] = details.requestHeaders[
+          "sec-ch-ua"
+        ]
+          .replace(/"Electron";v="[\d\.]+",?/g, "")
+          .replace(/,?\s*"Electron";v="[\d\.]+"/g, "");
       }
       if (details.url.includes("megaplay")) {
         details.requestHeaders["Referer"] = "https://anikototv.to/";
+      } else if (details.url.includes("kwik.cx")) {
+        details.requestHeaders["Referer"] = "https://animepahe.pw/";
       }
       callback({ requestHeaders: details.requestHeaders });
-    }
+    },
   );
 
   global.ScrapperWindow.webContents.on(
@@ -120,7 +136,7 @@ let cookieSaveTimeout = null;
 // Save Cookies to disk
 async function saveCookies() {
   if (!global.ScrapperWindow) return;
-  
+
   if (cookieSaveTimeout) {
     clearTimeout(cookieSaveTimeout);
   }
@@ -128,7 +144,8 @@ async function saveCookies() {
   cookieSaveTimeout = setTimeout(async () => {
     try {
       if (!global.ScrapperWindow) return;
-      const cookies = await global.ScrapperWindow.webContents.session.cookies.get({});
+      const cookies =
+        await global.ScrapperWindow.webContents.session.cookies.get({});
       fs.writeFile(COOKIE_FILE, JSON.stringify(cookies, null, 2), (err) => {
         if (err) console.error("Failed to save cookies", err);
       });
@@ -146,7 +163,9 @@ async function loadCookies() {
   try {
     const cookies = JSON.parse(fs.readFileSync(COOKIE_FILE, "utf8"));
     for (const cookie of cookies) {
-      const domain = cookie.domain.startsWith('.') ? cookie.domain.slice(1) : cookie.domain;
+      const domain = cookie.domain.startsWith(".")
+        ? cookie.domain.slice(1)
+        : cookie.domain;
       const url = `${cookie.secure ? "https" : "http"}://${domain}${cookie.path}`;
       await global.ScrapperWindow.webContents.session.cookies.set({
         url: url,
