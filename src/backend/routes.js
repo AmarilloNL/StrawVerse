@@ -274,10 +274,12 @@ router.post("/api/list/:AnimeManga/:provider/", async (req, res) => {
         data = await MalPage(config.Animeprovider, filters?.page);
       } else if (provider === "provider") {
         const provider = await providerFetch("Anime");
+        if (!provider?.provider) throw new Error("Missing Provider!");
         data = await latestAnime(provider, filters);
         data = { ...data, site: config.Animeprovider };
       } else if (provider === "search") {
         const provider = await providerFetch("Anime");
+        if (!provider?.provider) throw new Error("Missing Provider!");
         data = await animesearch(provider, req?.query?.query, filters);
         data = { ...data, site: config.Animeprovider };
       }
@@ -290,9 +292,11 @@ router.post("/api/list/:AnimeManga/:provider/", async (req, res) => {
         );
       } else if (provider === "provider") {
         const provider = await providerFetch("Manga");
+        if (!provider?.provider) throw new Error("Missing Provider!");
         data = await latestMangas(provider, filters?.page);
       } else if (provider === "search") {
         const provider = await providerFetch("Manga");
+        if (!provider?.provider) throw new Error("Missing Provider!");
         data = await MangaSearch(provider, req?.query?.query, filters?.page);
       }
     }
@@ -418,12 +422,13 @@ router.post("/api/episodes", async (req, res) => {
 
 // Fetches Manga Chapters
 router.post("/api/chapters", async (req, res) => {
-  let { id, provider } = req.body;
+  let { id, page, provider } = req.body;
+  page = parseInt(page ?? 1);
   try {
     if (!id) throw new Error("ID is Missing");
 
     const Mangaprovider = await providerFetch("Manga", provider ?? null);
-    const data = await fetchChapters(Mangaprovider, id);
+    const data = await fetchChapters(Mangaprovider, id, page);
     if (!data) throw new Error("No Episodes Found");
 
     return res.json(data);
@@ -916,6 +921,80 @@ router.get("/proxy", async (req, res) => {
     res.status(500).json({ error: "Failed to fetch video" });
   }
 });
+
+// Proxy for Manga Images
+router.get("/api/manga/image", async (req, res) => {
+  let decodedUrl = "";
+  try {
+    const imageUrl = req.query.url;
+    if (!imageUrl) {
+      return res.status(400).send("Missing image url");
+    }
+
+    decodedUrl = decodeURIComponent(imageUrl);
+
+    if (decodedUrl.startsWith("file://") || decodedUrl.startsWith("/")) {
+      const filePath = decodedUrl.startsWith("file://") ? decodedUrl.slice(7) : decodedUrl;
+      if (fs.existsSync(filePath)) {
+        res.setHeader("Content-Type", "image/jpeg");
+        res.setHeader("Cache-Control", "public, max-age=86400");
+        return res.sendFile(filePath);
+      } else {
+        return res.status(404).send("Local file not found");
+      }
+    }
+
+    const provider = await providerFetch("Manga");
+    let headers = {};
+    if (provider?.provider?.getHeaders) {
+      headers = await provider.provider.getHeaders();
+    }
+
+    const response = await axios.get(decodedUrl, {
+      responseType: "arraybuffer",
+      headers: {
+        Referer: "https://allmanga.to/",
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        ...headers,
+      },
+    });
+
+    const contentType = response.headers["content-type"] || "image/jpeg";
+    res.setHeader("Content-Type", contentType);
+    res.setHeader("Cache-Control", "public, max-age=86400");
+    return res.send(response.data);
+  } catch (err) {
+    console.error("Manga image proxy direct fetch failed, trying ScrapperWindow fallback:", err.message);
+    
+    if (global.ScrapperWindow && decodedUrl) {
+      try {
+        const base64 = await global.ScrapperWindow.webContents.executeJavaScript(`
+          (async () => {
+            const res = await fetch("${decodedUrl}");
+            if (!res.ok) throw new Error("Fetch failed with status " + res.status);
+            const blob = await res.blob();
+            return new Promise((resolve, reject) => {
+              const reader = new FileReader();
+              reader.onloadend = () => resolve(reader.result.split(',')[1]);
+              reader.onerror = reject;
+              reader.readAsDataURL(blob);
+            });
+          })()
+        `);
+        const buffer = Buffer.from(base64, 'base64');
+        res.setHeader("Content-Type", "image/webp");
+        res.setHeader("Cache-Control", "public, max-age=86400");
+        return res.send(buffer);
+      } catch (fallbackErr) {
+        console.error("Manga image proxy ScrapperWindow fallback failed:", fallbackErr.message);
+      }
+    }
+    
+    res.status(500).send("Failed to load manga image");
+  }
+});
+
 
 // Error Page
 router.get("/error", async (req, res) => {

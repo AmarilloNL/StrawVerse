@@ -108,6 +108,10 @@ const createWindow = () => {
         url.match(/\/anime\/[a-f0-9]{32}\/[a-f0-9]{32}\//)
       ) {
         details.requestHeaders["Referer"] = "https://megaplay.buzz/";
+      } else if (url.includes("youtube-anime.com")) {
+        details.requestHeaders["Referer"] = "https://allmanga.to/";
+        details.requestHeaders["User-Agent"] =
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36";
       }
       callback({ requestHeaders: details.requestHeaders });
     },
@@ -203,8 +207,8 @@ const createWindow = () => {
     app.quit();
   });
 
-  const menu = Menu.buildFromTemplate([]);
-  Menu.setApplicationMenu(menu);
+  // const menu = Menu.buildFromTemplate([]);
+  // Menu.setApplicationMenu(menu);
 
   // max priority
   if (process.platform === "win32") {
@@ -225,7 +229,13 @@ const createWindow = () => {
       os.setPriority(process.pid, -10);
       logger.info("Process priority set to high on Unix.");
     } catch (err) {
-      logger.error(`Failed to set Unix process priority : ${err.message}`);
+      if (err.message.includes("EACCES") || err.message.includes("EPERM")) {
+        logger.warn(
+          "Could not set Unix process priority to high (requires elevated privileges).",
+        );
+      } else {
+        logger.error(`Failed to set Unix process priority : ${err.message}`);
+      }
     }
   }
 

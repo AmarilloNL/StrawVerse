@@ -212,8 +212,9 @@ async function fetchPageData(page, init = false) {
     const data = await response.json();
 
     if (data?.extension_missing) {
+      const type = api.includes("Manga") ? "Manga" : "Anime";
       window.location.href = `/error?message=${encodeURIComponent(
-        "Please Install Provider From Marketplace From 'Settings > Anime > MarketPlace' !"
+        `Please Select or Install a Provider from 'Settings > ${type}' !`
       )}`;
     }
 

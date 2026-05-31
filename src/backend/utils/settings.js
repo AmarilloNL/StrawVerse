@@ -374,6 +374,8 @@ async function HandleExtensions(TaskType, AnimeManga, ExtensionName) {
         `https://raw.githubusercontent.com/TheYogMehta/extensions/refs/heads/main/extensions/${AnimeManga}/${ExtensionName}.js`
       );
       fs.writeFileSync(extensionPath, response.body, "utf-8");
+
+
       await loadAllScrapers();
       return {
         type: "success",
@@ -390,6 +392,8 @@ async function HandleExtensions(TaskType, AnimeManga, ExtensionName) {
   } else if (TaskType === "remove") {
     if (fs.existsSync(extensionPath)) {
       fs.unlinkSync(extensionPath);
+
+
       await loadAllScrapers();
       return {
         type: "success",

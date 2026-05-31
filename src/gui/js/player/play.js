@@ -14,6 +14,16 @@ async function Videoplay(
 ) {
   try {
     ep = parseInt(EpisodeNumber, 10) ?? 0;
+
+    Swal.fire({
+      title: 'Loading Episode...',
+      allowEscapeKey: false,
+      allowOutsideClick: false,
+      didOpen: () => {
+        Swal.showLoading();
+      }
+    });
+
     if (player) {
       player.pause();
     }
@@ -36,6 +46,11 @@ async function Videoplay(
     });
 
     const data = await response.json();
+
+    if (data.error) {
+      Swal.fire('Error', data.message || 'Failed to load video.', 'error');
+      return;
+    }
 
     let sources = {
       sub: data?.sub || [],
@@ -65,8 +80,10 @@ async function Videoplay(
     addSkipIntroButton();
     DiscordRPC("Watching", `Ep ${ep}`);
     AutoTracking();
+    Swal.close();
   } catch (err) {
     console.error("Error loading video:", err);
+    Swal.fire('Error', 'An unexpected error occurred while loading the video.', 'error');
   }
 }
 

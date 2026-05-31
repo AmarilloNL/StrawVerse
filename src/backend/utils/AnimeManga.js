@@ -278,9 +278,9 @@ async function MangaInfo(provider, MANGA_ID) {
 }
 
 // Manga
-async function fetchChapters(provider, MANGA_ID) {
+async function fetchChapters(provider, MANGA_ID, page = 1) {
   const cacheKey = CreateHashKey(
-    `mangachapters${provider.provider_name}_${MANGA_ID}`
+    `mangachapters${provider.provider_name}_${MANGA_ID}_${page}`
   );
 
   const cachedData = cache.get(cacheKey);
@@ -289,7 +289,7 @@ async function fetchChapters(provider, MANGA_ID) {
     return cachedData;
   }
 
-  let info = await provider.provider.fetchChapters(MANGA_ID);
+  let info = await provider.provider.fetchChapters(MANGA_ID, page);
   cache.set(cacheKey, info, 60);
   return info;
 }
@@ -312,12 +312,14 @@ async function MangaChapterFetch(provider, MangaChapterID) {
 }
 
 // Download Chapters
+// Download Chapters
 async function DownloadChapters(
   outputFile,
   pages,
   Title,
   ChapterName,
-  MangaChapterID
+  MangaChapterID,
+  headers = {}
 ) {
   try {
     const zip = new JSZip();
@@ -339,9 +341,16 @@ async function DownloadChapters(
         continue;
       }
 
-      const imageBuffer = await downloadImage(imageUrl);
+      const imageBuffer = await downloadImage(imageUrl, headers);
 
-      const fileExtension = imageUrl.split(".").pop().split(/\#|\?/)[0];
+      let fileExtension = "jpg";
+      if (!imageUrl.startsWith("file://") && !imageUrl.startsWith("/")) {
+        fileExtension = imageUrl.split(".").pop().split(/\#|\?/)[0];
+      } else {
+        const path = require("path");
+        fileExtension = path.extname(imageUrl.startsWith("file://") ? imageUrl.slice(7) : imageUrl).replace(".", "") || "jpg";
+      }
+
       const fileName = `${i + 1}.${fileExtension}`;
 
       zip.file(fileName, imageBuffer);
@@ -352,21 +361,39 @@ async function DownloadChapters(
 
     const cbzBuffer = await zip.generateAsync({ type: "nodebuffer" });
     fs.writeFileSync(outputFile, cbzBuffer);
+
+
   } catch (error) {
     throw new Error(error);
   }
 }
 
 // Download Chapter Images Utils
-async function downloadImage(url) {
+async function downloadImage(url, headers = {}) {
   if (url) {
     url = decodeURIComponent(url);
+
+    if (url.startsWith("data:image/")) {
+      const base64Data = url.split("base64,")[1];
+      return Buffer.from(base64Data, "base64");
+    }
+    if (url.includes("/api/manga/image?url=")) {
+      url = url.split("/api/manga/image?url=")[1];
+    }
+    if (url.startsWith("file://")) {
+      const filePath = url.slice(7);
+      return fs.readFileSync(filePath);
+    }
+    if (url.startsWith("/")) {
+      return fs.readFileSync(url);
+    }
     const response = await axios(url, {
       responseType: "arraybuffer",
       headers: {
         Referer: "https://weebcentral.com/",
         "User-Agent":
           "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36",
+        ...headers,
       },
     });
     return Buffer.from(response.data, "binary");

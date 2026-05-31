@@ -210,3 +210,35 @@
   visibility: visible;
   opacity: 1;
 }
+
+
+/* Chapter Divider for Manga Reader */
+.chapter-divider {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 90vh;
+  width: 100%;
+}
+
+.chapter-divider h2 {
+  font-size: 2.5rem;
+  color: white;
+  background-color: #222;
+  padding: 1.5rem 3rem;
+  border-radius: 15px;
+  text-align: center;
+  border: 1px solid #f5e1ff;
+  box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+}
+
+/* Manga Page Loading Placeholder */
+.manga-page-placeholder {
+  min-height: 85vh;
+  background-color: #151515;
+  background-image: url("../images/loading.gif");
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: 80px;
+}
+

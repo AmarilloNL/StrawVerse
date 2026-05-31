@@ -1,6 +1,4 @@
-# Broken Atp. Development Restarts On 7th
-
-<h6 align="right">💻 Support Windows Only For Now</h6>
+<h6 align="right">💻 Support Windows & Linux</h6>
 <h1 align="center">
   <img src="https://capsule-render.vercel.app/api?type=soft&fontColor=703ee5&text=StrawVerse&height=150&fontSize=40&desc=Ridiculously%20efficient,%20fast%20and%20light-weight.&descAlignY=75&descAlign=50&color=00000000&animation=twinkling">
 </h1>
@@ -9,14 +7,13 @@
 
 Special thanks to the first person who supported the development of this project:
 
-| Name/Handle | Contribution | Link |
-|-------------|--------------|------|
-| maighe | $5 | [YouTube](https://www.youtube.com/@maighe_tv2848) |
+| Name/Handle | Contribution | Link                                              |
+| ----------- | ------------ | ------------------------------------------------- |
+| maighe      | $5           | [YouTube](https://www.youtube.com/@maighe_tv2848) |
 
 Your contribution helps me improve, maintain, and update this project. Thank you!
 
 Want to support? [Buy me a coffee](https://buymeacoffee.com/kowareta).
-
 
 ## Table of Contents 📖
 
@@ -50,7 +47,7 @@ This is a Node.js-based anime & manga downloader that allows you to download ani
 
 ## System Requirements
 
-- **Operating System:** Windows (Support for other platforms coming soon)
+- **Operating System:** Windows & Linux
 
 ## Installation
 
@@ -104,15 +101,12 @@ Follow these steps to build application:
 ## Prerequisites
 
 1. **Download and install Node.js**:
-
    - [Node.js Download](https://nodejs.org/)
 
 2. **Download and install Git**:
-
    - [Git Download](https://git-scm.com/)
 
 3. **Download and install Python**
-
    - [Python Download](https://www.python.org/downloads/)
 
 4. **Windows Build Tools (Windows only, required for node-gyp)**

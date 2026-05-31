@@ -217,6 +217,15 @@ async function downloadMangaChapters(
     throw new Error("No Image Found For This Chapter!");
   }
 
+  let headers = {};
+  if (provider?.provider?.getHeaders) {
+    try {
+      headers = await provider.provider.getHeaders();
+    } catch (err) {
+      logger.error(`Failed to get headers for manga provider: ${err.message}`);
+    }
+  }
+
   const directoryPath = await MangaDir(Title, config?.CustomDownloadLocation);
   try {
     const sanitizedChapterName = ChapterTitle.replace(/[<>:"/\\|?*]/g, "-");
@@ -226,7 +235,8 @@ async function downloadMangaChapters(
       ChapterData,
       Title,
       ChapterTitle,
-      ChapterId
+      ChapterId,
+      headers
     );
   } catch (err) {
     throw err;

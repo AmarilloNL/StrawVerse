@@ -3,8 +3,13 @@ const fs = require("fs");
 const path = require("path");
 
 let isBusy = false;
+let isQuitting = false;
 const queue = [];
 const COOKIE_FILE = path.join(app.getPath("userData"), "cookies.json");
+
+app.on("before-quit", () => {
+  isQuitting = true;
+});
 
 // Loading helpers
 
@@ -15,15 +20,26 @@ function createScrapperWindow() {
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
-      webSecurity: false,
+      webSecurity: true,
       partition: "persist:scrapper",
       autoplayPolicy: "no-user-gesture-required",
     },
   });
+  
+  const defaultUA = global.ScrapperWindow.webContents.userAgent;
+  global.ScrapperWindow.webContents.userAgent = defaultUA.replace(/Electron\/[\d\.]+ /g, '').replace(/strawverse\/[\d\.]+ /g, '');
 
   global.ScrapperWindow.webContents.session.webRequest.onBeforeRequest(
     { urls: ["*://*/*"] },
     (details, callback) => {
+      if (global.IsBypassingCloudflare) {
+        callback({ cancel: false });
+        return;
+      }
+      if (!details.url.startsWith("http://") && !details.url.startsWith("https://")) {
+        callback({ cancel: false });
+        return;
+      }
       if (details.url.includes(".m3u8") && !details.url.includes("ping.gif")) {
         global.LastM3u8 = details.url;
       }
@@ -38,7 +54,13 @@ function createScrapperWindow() {
         details.url.includes(".m3u8") ||
         details.url.includes("megacloud") ||
         details.url.includes("rabbitstream") ||
-        details.url.includes("jwpcdn")
+        details.url.includes("jwpcdn") ||
+        details.url.includes("cloudflare") ||
+        details.url.includes("cdn-cgi") ||
+        details.url.includes("allmanga") ||
+        details.url.includes("allanime") ||
+        details.url.includes("youtube-anime") ||
+        details.url.includes("ytimgf")
       ) {
         callback({ cancel: false });
       } else {
@@ -50,6 +72,12 @@ function createScrapperWindow() {
   global.ScrapperWindow.webContents.session.webRequest.onBeforeSendHeaders(
     { urls: ["*://*/*"] },
     (details, callback) => {
+      if (details.requestHeaders["User-Agent"]) {
+        details.requestHeaders["User-Agent"] = details.requestHeaders["User-Agent"].replace(/Electron\/[\d\.]+ /g, '').replace(/strawverse\/[\d\.]+ /g, '');
+      }
+      if (details.requestHeaders["sec-ch-ua"]) {
+        details.requestHeaders["sec-ch-ua"] = details.requestHeaders["sec-ch-ua"].replace(/"Electron";v="[\d\.]+",?/g, '').replace(/,?\s*"Electron";v="[\d\.]+"/g, '');
+      }
       if (details.url.includes("megaplay")) {
         details.requestHeaders["Referer"] = "https://anikototv.to/";
       }
@@ -66,6 +94,13 @@ function createScrapperWindow() {
     },
   );
 
+  global.ScrapperWindow.on("close", (event) => {
+    if (!isQuitting) {
+      event.preventDefault();
+      global.ScrapperWindow.hide();
+    }
+  });
+
   global.ScrapperWindow.on("closed", () => {
     global.ScrapperWindow = null;
   });
@@ -80,17 +115,27 @@ function createScrapperWindow() {
   );
 }
 
+let cookieSaveTimeout = null;
+
 // Save Cookies to disk
 async function saveCookies() {
   if (!global.ScrapperWindow) return;
-  try {
-    const cookies = await global.ScrapperWindow.webContents.session.cookies.get(
-      {},
-    );
-    fs.writeFileSync(COOKIE_FILE, JSON.stringify(cookies, null, 2));
-  } catch (err) {
-    // ignore errors
+  
+  if (cookieSaveTimeout) {
+    clearTimeout(cookieSaveTimeout);
   }
+
+  cookieSaveTimeout = setTimeout(async () => {
+    try {
+      if (!global.ScrapperWindow) return;
+      const cookies = await global.ScrapperWindow.webContents.session.cookies.get({});
+      fs.writeFile(COOKIE_FILE, JSON.stringify(cookies, null, 2), (err) => {
+        if (err) console.error("Failed to save cookies", err);
+      });
+    } catch (err) {
+      // ignore errors
+    }
+  }, 2000);
 }
 
 // Load Cookies from disk
@@ -101,10 +146,21 @@ async function loadCookies() {
   try {
     const cookies = JSON.parse(fs.readFileSync(COOKIE_FILE, "utf8"));
     for (const cookie of cookies) {
-      await global.ScrapperWindow.webContents.session.cookies.set(cookie);
+      const domain = cookie.domain.startsWith('.') ? cookie.domain.slice(1) : cookie.domain;
+      const url = `${cookie.secure ? "https" : "http"}://${domain}${cookie.path}`;
+      await global.ScrapperWindow.webContents.session.cookies.set({
+        url: url,
+        name: cookie.name,
+        value: cookie.value,
+        domain: cookie.domain,
+        path: cookie.path,
+        secure: cookie.secure,
+        httpOnly: cookie.httpOnly,
+        expirationDate: cookie.expirationDate,
+      });
     }
   } catch (err) {
-    // ignore
+    console.error("Failed to load cookies:", err);
   }
 }
 
@@ -189,6 +245,7 @@ async function processQueue() {
 async function ExitScrapperWindow() {
   if (global.ScrapperWindow && !global.ScrapperWindow.isDestroyed()) {
     await saveCookies();
+    isQuitting = true;
     global.ScrapperWindow.close();
     global.ScrapperWindow = null;
   }

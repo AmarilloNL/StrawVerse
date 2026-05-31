@@ -52,20 +52,21 @@ const observer = new IntersectionObserver(
         ).textContent = `${ChapterData?.TotalPages}`;
 
         if (
-          CurrentPage + 1 === ChapterData?.TotalPages &&
+          CurrentPage + 3 >= ChapterData?.TotalPages &&
           LoadNextChapter &&
           lastLoadedChapter >= CurrentChapter &&
           CurrentChapter + 1 < EpisodesChapters?.Chapters.length &&
-          !EpisodesChapters?.Chapters[CurrentChapter + 1]?.fetched
+          !EpisodesChapters?.Chapters[CurrentChapter + 1]?.fetched &&
+          !EpisodesChapters?.Chapters[CurrentChapter + 1]?.fetching
         ) {
-          LoadChapter(CurrentChapter + 1, LoadNextChapter);
+          LoadChapter(CurrentChapter + 1, true);
         }
       }
     });
   },
   {
     root: null,
-    rootMargin: "0px",
+    rootMargin: "1000px",
     threshold: 0.1,
   }
 );
@@ -137,10 +138,12 @@ async function AddInfo(data) {
   }
 
   // Create Img tag;
+  let coverImage = data.image ?? "./images/image-404.png";
+  if (type === "Manga" && coverImage && coverImage.startsWith("http")) {
+    coverImage = `/api/manga/image?url=${encodeURIComponent(coverImage)}`;
+  }
 
-  LeftSide.innerHTML += `<img class="anime-image" src="${
-    data.image ?? "./images/image-404.png"
-  }" alt="${
+  LeftSide.innerHTML += `<img class="anime-image" src="${coverImage}" alt="${
     data?.title
   }" id="anime-image" onerror="this.onerror=null; this.src='./images/image-404.png';">`;
 
@@ -226,7 +229,7 @@ async function AddInfo(data) {
         
         <div class="dubOptions downloadOptions" style="display: none" id="dubDownloads"></div>`
         : `
-
+        <div class="pages" style="display: none"></div>
         <div class="chaptersOptions downloadOptions" id="chaptersDownloads"></div>
         `
     }
@@ -282,7 +285,7 @@ async function AddInfo(data) {
 
         <!-- Jump to Chapter (Inline) -->
         <div class="jump-container">
-          <input type="number" id="jumpToChapter" placeholder="Enter Chapter" min="1" class="manga-input" />
+          <input type="number" id="jumpToChapter" placeholder="Enter Chapter" min="1" class="manga-input" onkeypress="if(event.key === 'Enter') GoToChapter()" />
           
           <button id="jumpChapterBtn" onclick="GoToChapter()"  class="manga-btn">Go</button>
         </div>
@@ -301,7 +304,7 @@ async function AddInfo(data) {
 
         <!-- Jump to Page (Inline) -->
         <div class="jump-container">
-          <input type="number" id="jumpToPage" placeholder="Enter Page" min="1" class="manga-input"/>
+          <input type="number" id="jumpToPage" placeholder="Enter Page" min="1" class="manga-input" onkeypress="if(event.key === 'Enter') GoToPage()"/>
           
           <button id="jumpPageBtn" class="manga-btn" onclick="GoToPage()">Go</button>
         </div>
@@ -472,14 +475,20 @@ async function EpisodeFetch(page = 1) {
 }
 
 // Fetch Chapters
-async function ChapterFetch() {
+async function ChapterFetch(page = 1) {
+  let targetId = AnimeMangaepid;
+  if (window.selectedComixGroupId) {
+    targetId = `${AnimeMangaepid}?group_id=${window.selectedComixGroupId}`;
+  }
+
   let MangaChapters = await fetch(`/api/chapters`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      id: AnimeMangaepid,
+      id: targetId,
+      page: page,
       ...(window.LocalAnimeManga
         ? {
             provider: window.LocalAnimeManga,
@@ -497,8 +506,10 @@ async function ChapterFetch() {
     return;
   }
 
-  TotalChapter = data?.TotalChapter;
+  TotalPages = data?.totalPages ?? 1;
+  TotalChapter = data?.total ?? 0;
   EpisodesChapters = data;
+  return data;
 }
 
 // Handles Episodes
@@ -723,6 +734,41 @@ async function HandleChapters() {
     ).textContent = `${EpisodesChapters.total}`;
   }
 
+
+
+  // Chapter pagination rendering
+  if (EpisodesChapters?.totalPages > 1) {
+    document.querySelectorAll(".pages").forEach((PageHandlers) => {
+      PageHandlers.style.display = "flex";
+      PageHandlers.innerHTML = `
+      <button class="page" onclick="changePage(${EpisodesChapters?.currentPage - 1})" ${
+        EpisodesChapters?.currentPage === 1 ? "disabled" : ""
+      }>
+        <
+      </button>
+      <span class="totalPages">
+        <input type="number" id="pageInput" min="1" max="${
+          EpisodesChapters?.totalPages
+        }" value="${
+        EpisodesChapters?.currentPage
+      }" onkeypress="handlePageInput(event)" class="pageInput"> : &nbsp &nbsp &nbsp &nbsp${
+        EpisodesChapters?.totalPages
+      }
+      </span>
+      <button class="page" onclick="changePage(${EpisodesChapters?.currentPage + 1})" ${
+        EpisodesChapters?.currentPage === EpisodesChapters?.totalPages ? "disabled" : ""
+      }>
+        >
+      </button>
+      `;
+    });
+  } else {
+    document.querySelectorAll(".pages").forEach((PageHandlers) => {
+      PageHandlers.style.display = "none";
+      PageHandlers.innerHTML = "";
+    });
+  }
+
   // Adding Downloaded
   if (EpisodesChapters?.DownloadedChapters?.length > 0) {
     let downloadsEpsdiv = document.getElementById("downloaded-episodes-info");
@@ -854,58 +900,76 @@ function toggleDownloadOptions(type = null) {
 function changePage(page) {
   if (page < 1 || page > TotalPages) return;
 
-  EpisodeFetch(page).then((data) => {
-    HandleEpisodes(data);
-  });
+  if (type === "Anime") {
+    EpisodeFetch(page).then((data) => {
+      HandleEpisodes(data);
+    });
+  } else {
+    ChapterFetch(page).then(() => {
+      HandleChapters();
+    });
+  }
 }
 
 // Handle Episode Input Page
 function handlePageInput(event) {
   if (event.key === "Enter") {
     let page = parseInt(event.target.value);
-    HandleEpisodes(EpisodeFetch(page));
+    if (type === "Anime") {
+      HandleEpisodes(EpisodeFetch(page));
+    } else {
+      ChapterFetch(page).then(() => {
+        HandleChapters();
+      });
+    }
   }
 }
 
 // Load Chapter
 async function LoadChapter(ChapterNum, Append = false) {
   try {
-    let Downloaded = EpisodesChapters?.DownloadedChapters?.includes(
-      ChapterNum + 1
-    );
     let Chapter = EpisodesChapters?.Chapters?.[ChapterNum];
-
-    let data = null;
-
     if (!Chapter) {
       return Swal.fire({
         icon: "error",
         title: "Chapter Not Found",
         text: `Couldnt Find Chapter : ${ChapterNum}`,
       });
-    } else if (!Downloaded && Chapter?.fetched && Append) {
-      DiscordRPC("Reading", `Chp ${ChapterNum + 1}`);
-      return scrollToElement(`mangapage-${ChapterNum}-0`);
-    } else if (!Downloaded && Chapter && (!Chapter?.fetched || !Append)) {
-      const response = await fetch("/api/read", {
-        method: "POST",
-        body: JSON.stringify({ chapterID: Chapter?.id }),
-        headers: {
-          "Content-Type": "application/json; charset=UTF-8",
-        },
-      });
+    }
 
-      data = await response.json();
-    } else {
-      let Foundchapter = EpisodesChapters?.Chapters[ChapterNum + 1];
-      if (Foundchapter && Foundchapter?.fetched && !Append) {
-        DiscordRPC("Reading", `Chp ${ChapterNum + 1}`);
-        scrollToElement(`mangapage-${ChapterNum}-0`);
+    if (Chapter.fetching) return;
+    Chapter.fetching = true;
+
+    let Downloaded = EpisodesChapters?.DownloadedChapters?.includes(
+      Chapter.number
+    );
+
+    let data = null;
+
+    if (Chapter.pages && Append) {
+      data = Chapter.pages;
+      if (document.getElementById(`mangapage-${ChapterNum}-0`)) {
+        Chapter.fetching = false;
+        DiscordRPC("Reading", `Chp ${Chapter.number}`);
+        return scrollToElement(`mangapage-${ChapterNum}-0`);
+      }
+    }
+
+    if (!data) {
+      if (!Downloaded) {
+        const response = await fetch("/api/read", {
+          method: "POST",
+          body: JSON.stringify({ chapterID: Chapter?.id }),
+          headers: {
+            "Content-Type": "application/json; charset=UTF-8",
+          },
+        });
+        data = await response.json();
       } else {
         const response = await fetch("/api/read", {
           method: "POST",
           body: JSON.stringify({
-            chapterID: ChapterNum + 1,
+            chapterID: Chapter.number,
             Downloaded: true,
             MangaID: id,
           }),
@@ -913,29 +977,44 @@ async function LoadChapter(ChapterNum, Append = false) {
             "Content-Type": "application/json; charset=UTF-8",
           },
         });
-
         data = await response.json();
       }
     }
 
-    if (data) {
-      DiscordRPC("Reading", `Chp ${ChapterNum + 1}`);
+    if (data && data.length > 0) {
+      Chapter.pages = data;
+      DiscordRPC("Reading", `Chp ${Chapter.number}`);
       if (!Append) scrollToElement(`mangaContainer`);
 
       const mangaContainer = document.getElementById("mangaContainer");
       if (!Append) {
-        mangaContainer.innerHTML = `<h2>Chapter ${Chapter.number}</h2>`;
+        mangaContainer.innerHTML = `<div class="chapter-divider"><h2>Chapter ${Chapter.number}</h2></div>`;
       } else {
-        mangaContainer.innerHTML += `<h2>Chapter ${Chapter.number}</h2>`;
+        mangaContainer.innerHTML += `<div class="chapter-divider"><h2>Chapter ${Chapter.number}</h2></div>`;
       }
 
       data.forEach((page, index) => {
         const img = document.createElement("img");
-        img.src = page?.img;
+        let imgSrc = page?.img;
+        if (imgSrc && imgSrc.startsWith("http")) {
+          imgSrc = `/api/manga/image?url=${encodeURIComponent(imgSrc)}`;
+        }
+        img.src = imgSrc;
         img.loading = "lazy";
         img.alt = `Manga Page ${page?.page}`;
         img.id = `mangapage-${ChapterNum}-${index}`;
         img.classList.add("manga-page");
+
+        // Add loading placeholder class, and remove it on success/error
+        img.classList.add("manga-page-placeholder");
+        img.onload = () => {
+          img.classList.remove("manga-page-placeholder");
+        };
+        img.onerror = () => {
+          img.classList.remove("manga-page-placeholder");
+          img.src = "../images/image-404.png";
+        };
+
         mangaContainer.appendChild(img);
       });
 
@@ -944,22 +1023,19 @@ async function LoadChapter(ChapterNum, Append = false) {
       });
 
       document.getElementById("currentChapter").textContent = `${
-        CurrentChapter + 1
+        ChapterNum + 1
       }`;
-
       document.getElementById("totalChapters").textContent = `${TotalChapter}`;
       document.getElementById("currentPage").textContent = `1`;
       document.getElementById("totalPages").textContent = `${data.length}`;
 
-      if (!EpisodesChapters?.Chapters?.fetched) {
-        EpisodesChapters.Chapters[ChapterNum] = {
-          ...EpisodesChapters?.Chapters[ChapterNum],
-          fetched: true,
-          TotalPages: data.length,
-        };
-      }
+      Chapter.fetched = true;
+      Chapter.TotalPages = data.length;
+      
       CurrentChapter = ChapterNum;
-      lastLoadedChapter = ChapterNum;
+      if (!Append || ChapterNum > lastLoadedChapter) {
+        lastLoadedChapter = ChapterNum;
+      }
       CurrentPage = 0;
     } else {
       Swal.fire({
@@ -968,8 +1044,12 @@ async function LoadChapter(ChapterNum, Append = false) {
         text: "Chapter Loading Failed!",
       });
     }
+    Chapter.fetching = false;
   } catch (err) {
     console.log(err);
+    if (EpisodesChapters?.Chapters?.[ChapterNum]) {
+      EpisodesChapters.Chapters[ChapterNum].fetching = false;
+    }
     Swal.fire({
       icon: "error",
       title: "Something Went Wrong",
@@ -981,15 +1061,7 @@ async function LoadChapter(ChapterNum, Append = false) {
 // Chapter prev
 async function PrevChapter() {
   if (CurrentChapter > 0) {
-    let Append = LoadNextChapter;
-    if (Append && EpisodesChapters?.Chapters[CurrentChapter - 1]?.fetched) {
-      Append = false;
-      EpisodesChapters.Chapters = EpisodesChapters?.Chapters.map((chapter) => ({
-        id: chapter.id,
-        title: chapter.title,
-      }));
-    }
-    await LoadChapter(CurrentChapter - 1, Append);
+    await LoadChapter(CurrentChapter - 1, false);
   } else {
     Swal.fire({
       icon: "error",
@@ -1001,8 +1073,8 @@ async function PrevChapter() {
 
 // Chapter Next
 async function NextChapter() {
-  if (CurrentChapter < EpisodesChapters?.Chapters?.length) {
-    await LoadChapter(CurrentChapter + 1, LoadNextChapter);
+  if (CurrentChapter + 1 < EpisodesChapters?.Chapters?.length) {
+    await LoadChapter(CurrentChapter + 1, false);
   } else {
     Swal.fire({
       icon: "error",
@@ -1028,17 +1100,7 @@ async function GoToChapter() {
         text: "Looks Like You Tried To Search My GF 😭",
       });
     } else {
-      let Append = LoadNextChapter;
-      if (!EpisodesChapters.Chapters[GoChapter - 1]?.fetched) {
-        Append = false;
-        EpisodesChapters.Chapters = EpisodesChapters.Chapters.map(
-          (chapter) => ({
-            id: chapter.id,
-            title: chapter.title,
-          })
-        );
-      }
-      await LoadChapter(GoChapter - 1, Append);
+      await LoadChapter(GoChapter - 1, false);
     }
   } else {
     Swal.fire({

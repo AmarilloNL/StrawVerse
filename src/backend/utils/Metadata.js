@@ -65,6 +65,7 @@ const tables = {
     last_fetched: "TEXT",
     last_Sync_Mal: "TEXT",
   },
+
 };
 
 // Create tables & update schema
@@ -225,21 +226,20 @@ async function getAllMetadata(type, baseDir, page = 1) {
         storedMetadata = [];
       }
 
+      const folderSet = new Set(folders);
       const missingFolders = storedMetadata
-        .filter((entry) => !folders.includes(entry.folder_name))
+        .filter((entry) => !folderSet.has(entry.folder_name))
         .map((entry) => entry.folder_name);
 
       missingFolders.forEach((folder) => {
         db.exec(`DELETE FROM ${type} WHERE folder_name = '${folder}'`);
       });
 
-      folders.map((alltitles) => {
-        if (
-          storedMetadata.some(
-            (meta_data) => meta_data.folder_name === alltitles,
-          )
-        )
-          return;
+      const storedFolderSet = new Set(storedMetadata.map(m => m.folder_name));
+
+      folders.forEach((alltitles) => {
+        if (storedFolderSet.has(alltitles)) return;
+        
         storedMetadata.push({
           title: alltitles.replaceAll("_", ""),
           folder_name: alltitles,
@@ -321,7 +321,12 @@ async function getAllMetadata(type, baseDir, page = 1) {
       };
     }
 
-    throw new Error("No Anime Found!");
+    return {
+      totalPages: 0,
+      currentPage: 1,
+      hasNextPage: false,
+      results: [],
+    };
   } catch (err) {
     throw new Error(`Error fetching metadata: ${err.message}`);
   }
