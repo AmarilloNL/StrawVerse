@@ -392,6 +392,8 @@ export default function VideoPlayer({
           <video
             ref={videoRef}
             controls
+            controlsList="nodownload"
+            onContextMenu={(e) => e.preventDefault()}
             className="player-video"
             crossOrigin="anonymous"
           >

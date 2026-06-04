@@ -155,14 +155,70 @@ class downloader {
 
       let Segments = [];
       const lines = Playlist.split("\n").map((line) => line.trim());
+      let currentKeyUrl = null;
+      let currentIv = null;
+      let mediaSequence = 1;
+
+      const mediaSeqLine = lines.find((l) =>
+        l.trim().startsWith("#EXT-X-MEDIA-SEQUENCE:"),
+      );
+      if (mediaSeqLine) {
+        const seqMatch = mediaSeqLine.match(/#EXT-X-MEDIA-SEQUENCE:(\d+)/);
+        if (seqMatch) {
+          mediaSequence = parseInt(seqMatch[1], 10);
+        }
+      }
+
+      let segmentCount = 0;
+
       for (const line of lines) {
-        if (line && !line.startsWith("#")) {
+        if (!line) continue;
+
+        if (line.startsWith("#")) {
+          if (line.startsWith("#EXT-X-KEY:METHOD=AES-128")) {
+            const keyMatch = line.match(
+              /METHOD=AES-128,URI="([^"]+)"(?:,IV=([^,]+))?/,
+            );
+            if (keyMatch) {
+              let rawUri = keyMatch[1];
+              let absoluteKeyUri = rawUri;
+              if (
+                !rawUri.startsWith("http://") &&
+                !rawUri.startsWith("https://")
+              ) {
+                try {
+                  absoluteKeyUri = new URL(rawUri, this.streamUrl).href;
+                } catch (e) {}
+              }
+              currentKeyUrl = absoluteKeyUri;
+              currentIv = keyMatch[2] || null;
+            }
+          }
+          continue;
+        }
+
+        // It's a segment or playlist URL
+        let absoluteUrl = line;
+        if (
+          !line.startsWith("http://") &&
+          !line.startsWith("https://")
+        ) {
           try {
-            const absoluteUrl = new URL(line, this.streamUrl).href;
-            Segments.push(absoluteUrl);
+            absoluteUrl = new URL(line, this.streamUrl).href;
           } catch (e) {
             Segments.push(line);
+            continue;
           }
+        }
+
+        if (currentKeyUrl) {
+          const segIv = currentIv || String(mediaSequence + segmentCount);
+          segmentCount++;
+          const port = global.PORT || 3000;
+          const proxyUrl = `http://localhost:${port}/proxy?url=${encodeURIComponent(absoluteUrl)}&keyUrl=${encodeURIComponent(currentKeyUrl)}&iv=${encodeURIComponent(segIv)}`;
+          Segments.push(proxyUrl);
+        } else {
+          Segments.push(absoluteUrl);
         }
       }
 

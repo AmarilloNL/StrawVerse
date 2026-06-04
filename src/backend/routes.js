@@ -5,6 +5,11 @@ const axios = require("axios");
 const JSZip = require("jszip");
 const path = require("path");
 const fs = require("fs");
+const crypto = require("crypto");
+const ffmpegStatic = require("ffmpeg-static");
+const { spawn } = require("child_process");
+
+const keyCache = {};
 const router = express.Router();
 
 // functions
@@ -285,7 +290,15 @@ router.post("/api/download/:AnimeManga/:singleMulti", async (req, res) => {
 
     if (AnimeManga === "Anime") {
       if (singleMulti === "Single") {
-        let { id, ep, Title, number, provider, malid = null, subdub = null } = req.body;
+        let {
+          id,
+          ep,
+          Title,
+          number,
+          provider,
+          malid = null,
+          subdub = null,
+        } = req.body;
         const targetEpId = ep && typeof ep === "object" ? ep.id : ep;
         MessageData = await downloadAnimeSingle(
           provider,
@@ -329,7 +342,13 @@ router.post("/api/download/:AnimeManga/:singleMulti", async (req, res) => {
         );
       } else if (singleMulti === "Multi") {
         let { id, Chapters, Title, provider, malid = null } = req.body;
-        MessageData = await downloadMangaMulti(provider, id, Chapters, Title, malid);
+        MessageData = await downloadMangaMulti(
+          provider,
+          id,
+          Chapters,
+          Title,
+          malid,
+        );
       }
     }
 
@@ -571,7 +590,9 @@ router.post("/api/info/:AnimeManga/:LocalMalProvider", async (req, res) => {
     if (data && data.malid) {
       try {
         const linkedRecords = db
-          .prepare(`SELECT id, provider, title, folder_name FROM ${AnimeManga} WHERE MalID = ?`)
+          .prepare(
+            `SELECT id, provider, title, folder_name FROM ${AnimeManga} WHERE MalID = ?`,
+          )
           .all(String(data.malid));
         data.linkedProviders = linkedRecords.map((r) => ({
           id: r.id,
@@ -586,11 +607,19 @@ router.post("/api/info/:AnimeManga/:LocalMalProvider", async (req, res) => {
 
     if (data) {
       try {
-        const localMapping = await FindMapping(AnimeManga, id, data.malid || null, setting.CustomDownloadLocation);
+        const localMapping = await FindMapping(
+          AnimeManga,
+          id,
+          data.malid || null,
+          setting.CustomDownloadLocation,
+        );
         if (localMapping) {
           if (AnimeManga === "Anime" && localMapping.DownloadedEpisodes) {
             data.DownloadedEpisodes = localMapping.DownloadedEpisodes;
-          } else if (AnimeManga === "Manga" && localMapping.DownloadedChapters) {
+          } else if (
+            AnimeManga === "Manga" &&
+            localMapping.DownloadedChapters
+          ) {
             data.DownloadedChapters = localMapping.DownloadedChapters;
           }
         }
@@ -759,6 +788,32 @@ router.post("/api/watch", async (req, res) => {
         resolvedEp = `${ep}-${subdub}`;
       }
       const sourcesArray = await fetchEpisodeSources(Animeprovider, resolvedEp);
+      if ((provider === "pahe" || provider === "animepahe") && sourcesArray) {
+        if (Array.isArray(sourcesArray.sources)) {
+          sourcesArray.sources = sourcesArray.sources.map((src) => {
+            if (src.url) {
+              src.url = `/proxy?url=${encodeURIComponent(src.url)}`;
+            }
+            return src;
+          });
+        }
+        if (sourcesArray.sub && Array.isArray(sourcesArray.sub.sources)) {
+          sourcesArray.sub.sources = sourcesArray.sub.sources.map((src) => {
+            if (src.url) {
+              src.url = `/proxy?url=${encodeURIComponent(src.url)}`;
+            }
+            return src;
+          });
+        }
+        if (sourcesArray.dub && Array.isArray(sourcesArray.dub.sources)) {
+          sourcesArray.dub.sources = sourcesArray.dub.sources.map((src) => {
+            if (src.url) {
+              src.url = `/proxy?url=${encodeURIComponent(src.url)}`;
+            }
+            return src;
+          });
+        }
+      }
       res.status(200).json(sourcesArray);
     } else {
       if (!epNum) throw new Error("Episode Number Not Found");
@@ -1280,15 +1335,125 @@ SPA_ROUTES.forEach((route) => {
 
 // Proxy for m3u8
 router.get("/proxy", async (req, res) => {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Headers", "*");
+  res.setHeader("Access-Control-Allow-Methods", "*");
+
   try {
     const targetParam = req?.query?.url || req?.query?.hianime;
     if (targetParam) {
       const targetUrl = decodeURIComponent(targetParam);
 
+      // Handle decryption & transcoding if keyUrl and iv are specified
+      const keyUrlParam = req?.query?.keyUrl;
+      const ivParam = req?.query?.iv;
+
+      if (keyUrlParam && ivParam) {
+        try {
+          const headers = getHeaders(targetUrl);
+
+          // Get key
+          let keyBuffer;
+          if (keyCache[keyUrlParam]) {
+            keyBuffer = keyCache[keyUrlParam];
+          } else {
+            const keyHeaders = getHeaders(keyUrlParam);
+            const keyResponse = await global.axios.get(keyUrlParam, {
+              responseType: "arraybuffer",
+              headers: {
+                ...keyHeaders,
+                Accept: "*/*",
+                Connection: "keep-alive",
+              },
+            });
+            keyBuffer = Buffer.from(keyResponse.data);
+            keyCache[keyUrlParam] = keyBuffer;
+          }
+
+          // Build IV
+          const iv = Buffer.alloc(16);
+          if (ivParam.startsWith("0x")) {
+            Buffer.from(ivParam.slice(2), "hex").copy(iv);
+          } else {
+            iv.writeUInt32BE(parseInt(ivParam, 10), 12);
+          }
+
+          const ff = spawn(ffmpegStatic, [
+            "-y",
+            "-copyts",
+            "-i",
+            "pipe:0",
+            "-map",
+            "0",
+            "-c:v",
+            "copy",
+            "-c:a",
+            "aac",
+            "-b:a",
+            "128k",
+            "-c:d",
+            "copy",
+            "-muxdelay",
+            "0",
+            "-muxpreload",
+            "0",
+            "-f",
+            "mpegts",
+            "pipe:1",
+          ]);
+
+          res.setHeader("Content-Type", "video/MP2T");
+          ff.stdout.pipe(res);
+
+          let ffmpegStderr = "";
+          ff.stderr.on("data", (data) => {
+            ffmpegStderr += data.toString();
+          });
+
+          ff.on("close", (code) => {
+            if (code !== 0) {
+              console.error(
+                "FFmpeg stream transcoding failed with code",
+                code,
+                ffmpegStderr,
+              );
+            }
+          });
+
+          ff.on("error", (err) => {
+            console.error("FFmpeg process error:", err.message);
+          });
+
+          // Fetch segment as stream
+          const response = await global.axios.get(targetUrl, {
+            responseType: "stream",
+            headers: {
+              ...headers,
+              Accept: "*/*",
+              Connection: "keep-alive",
+            },
+          });
+
+          // Decrypt segment stream and pipe it to FFmpeg stdin
+          const decipher = crypto.createDecipheriv(
+            "aes-128-cbc",
+            keyBuffer,
+            iv,
+          );
+          decipher.setAutoPadding(false);
+
+          response.data.pipe(decipher).pipe(ff.stdin);
+          return;
+        } catch (err) {
+          console.error("Error decrypting/transcoding segment:", err.message);
+          return res.status(500).json({ error: "Failed to process segment" });
+        }
+      }
+
       const headers = getHeaders(targetUrl);
 
       try {
-        const response = await axios.get(targetUrl, {
+        const response = await global.axios.get(targetUrl, {
           responseType: "arraybuffer",
           headers: {
             ...headers,
@@ -1297,31 +1462,112 @@ router.get("/proxy", async (req, res) => {
           },
         });
 
-        const contentType = response.headers["content-type"];
+        let contentType =
+          response.headers["content-type"] ||
+          response.headers["Content-Type"] ||
+          "";
+        if (
+          targetUrl.includes(".jpg") ||
+          targetUrl.includes("/segment-") ||
+          targetUrl.includes(".ts")
+        ) {
+          contentType = "video/MP2T";
+        }
         res.setHeader("Content-Type", contentType);
 
-        if (
-          contentType.includes("application/vnd.apple.mpegurl") ||
-          contentType.includes("video/MP2T")
-        ) {
+        const lowerContentType = contentType.toLowerCase();
+        const isPlaylist =
+          lowerContentType.includes("mpegurl") ||
+          lowerContentType.includes("application/x-mpegurl") ||
+          lowerContentType.includes("application/vnd.apple.mpegurl") ||
+          targetUrl.includes(".m3u8");
+
+        if (isPlaylist) {
           let m3u8Data = response.data.toString("utf-8");
 
-          // Rewrite absolute chunk URLs
-          m3u8Data = m3u8Data.replace(
-            /^https?:\/\/.*$/gm,
-            (match) => `/proxy?url=${encodeURIComponent(match)}`,
-          );
+          let lines = m3u8Data.split(/\r?\n/);
+          let currentKeyUrl = null;
+          let currentIv = null;
+          let mediaSequence = 1;
 
-          // Rewrite absolute encryption key URLs
-          m3u8Data = m3u8Data.replace(
-            /URI="(https?:\/\/[^"]+)"/g,
-            (match, p1) => `URI="/proxy?url=${encodeURIComponent(p1)}"`,
+          const mediaSeqLine = lines.find((l) =>
+            l.trim().startsWith("#EXT-X-MEDIA-SEQUENCE:"),
           );
+          if (mediaSeqLine) {
+            const seqMatch = mediaSeqLine.match(/#EXT-X-MEDIA-SEQUENCE:(\d+)/);
+            if (seqMatch) {
+              mediaSequence = parseInt(seqMatch[1], 10);
+            }
+          }
 
+          let segmentCount = 0;
+
+          lines = lines.map((line) => {
+            const trimmed = line.trim();
+            if (!trimmed) return line;
+
+            if (trimmed.startsWith("#")) {
+              if (trimmed.startsWith("#EXT-X-KEY:METHOD=AES-128")) {
+                const keyMatch = trimmed.match(
+                  /METHOD=AES-128,URI="([^"]+)"(?:,IV=([^,]+))?/,
+                );
+                if (keyMatch) {
+                  let rawUri = keyMatch[1];
+                  let absoluteKeyUri = rawUri;
+                  if (
+                    !rawUri.startsWith("http://") &&
+                    !rawUri.startsWith("https://")
+                  ) {
+                    try {
+                      absoluteKeyUri = new URL(rawUri, targetUrl).href;
+                    } catch (e) {}
+                  }
+                  currentKeyUrl = absoluteKeyUri;
+                  currentIv = keyMatch[2] || null;
+                }
+                return "# KEY REMOVED BY PROXY";
+              }
+
+              return line.replace(/URI="([^"]+)"/g, (match, p1) => {
+                let absoluteUri = p1;
+                if (!p1.startsWith("http://") && !p1.startsWith("https://")) {
+                  try {
+                    absoluteUri = new URL(p1, targetUrl).href;
+                  } catch (e) {
+                    return match;
+                  }
+                }
+                return `URI="/proxy?url=${encodeURIComponent(absoluteUri)}"`;
+              });
+            }
+
+            // It's a segment or playlist URL
+            let absoluteUrl = trimmed;
+            if (
+              !trimmed.startsWith("http://") &&
+              !trimmed.startsWith("https://")
+            ) {
+              try {
+                absoluteUrl = new URL(trimmed, targetUrl).href;
+              } catch (e) {
+                return line;
+              }
+            }
+
+            if (currentKeyUrl) {
+              const segIv = currentIv || String(mediaSequence + segmentCount);
+              segmentCount++;
+              return `/proxy?url=${encodeURIComponent(absoluteUrl)}&keyUrl=${encodeURIComponent(currentKeyUrl)}&iv=${encodeURIComponent(segIv)}`;
+            } else {
+              return `/proxy?url=${encodeURIComponent(absoluteUrl)}`;
+            }
+          });
+
+          m3u8Data = lines.join("\n");
           return res.send(m3u8Data);
         }
 
-        return res.send(response.data);
+        return res.end(response.data);
       } catch (error) {
         console.error("Error fetching video:", error.message);
         res.status(500).json({ error: "Failed to fetch video" });
@@ -1482,7 +1728,17 @@ router.post("/api/local/delete-episode", async (req, res) => {
 
       const filesToDelete = files.filter((file) => {
         const ext = path.extname(file).toLowerCase();
-        const videoExtensions = [".mp4", ".mkv", ".webm", ".ts", ".avi", ".mov", ".flv", ".m4v", ".3gp"];
+        const videoExtensions = [
+          ".mp4",
+          ".mkv",
+          ".webm",
+          ".ts",
+          ".avi",
+          ".mov",
+          ".flv",
+          ".m4v",
+          ".3gp",
+        ];
         const subExtensions = [".srt", ".vtt", ".ass", ".ssa"];
         if (!videoExtensions.includes(ext) && !subExtensions.includes(ext)) {
           return false;
@@ -1562,9 +1818,22 @@ router.post("/api/local/delete-multiple", async (req, res) => {
         const filesToDelete = files.filter((file) => {
           if (type === "Anime") {
             const ext = path.extname(file).toLowerCase();
-            const videoExtensions = [".mp4", ".mkv", ".webm", ".ts", ".avi", ".mov", ".flv", ".m4v", ".3gp"];
+            const videoExtensions = [
+              ".mp4",
+              ".mkv",
+              ".webm",
+              ".ts",
+              ".avi",
+              ".mov",
+              ".flv",
+              ".m4v",
+              ".3gp",
+            ];
             const subExtensions = [".srt", ".vtt", ".ass", ".ssa"];
-            if (!videoExtensions.includes(ext) && !subExtensions.includes(ext)) {
+            if (
+              !videoExtensions.includes(ext) &&
+              !subExtensions.includes(ext)
+            ) {
               return false;
             }
             const match = file.match(/^\d+(\.\d+)?/);

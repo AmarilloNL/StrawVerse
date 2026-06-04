@@ -129,6 +129,15 @@ function getBypassCheck(url) {
     };
   }
 
+  if (url.includes("kwik.cx")) {
+    return {
+      baseUrl: "https://kwik.cx",
+      check: (title, html) =>
+        title.toLowerCase().includes("kwik") &&
+        !title.toLowerCase().includes("just a moment"),
+    };
+  }
+
   if (
     url.includes("allmanga") ||
     url.includes("allanime") ||
