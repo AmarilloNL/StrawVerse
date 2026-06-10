@@ -256,53 +256,88 @@ class downloader {
         fs.mkdirSync(tempDir, { recursive: true });
       }
 
-      let FailedSegments = 0;
-      let i = 0;
+      const CONCURRENCY = 5;
+      let activeDownloads = 0;
+      let currentIndex = 0;
+      let stopDownloading = false;
+      let downloadError = null;
 
-      while (i < this.Segments.length) {
-        const segmentFile = path.join(tempDir, `${i}.ts`);
-        let alreadyDownloaded = false;
-        try {
-          if (fs.existsSync(segmentFile)) {
-            const stat = fs.statSync(segmentFile);
-            if (stat.size > 0) {
-              alreadyDownloaded = true;
+      await new Promise((resolve, reject) => {
+        const startNext = async () => {
+          if (stopDownloading) return;
+
+          if (currentIndex >= this.Segments.length) {
+            if (activeDownloads === 0) {
+              if (downloadError) reject(downloadError);
+              else resolve();
             }
+            return;
           }
-        } catch (e) {}
 
-        if (alreadyDownloaded) {
-          this.currentSegments++;
-          await this.logProgress();
-          i++;
-          continue;
+          const index = currentIndex++;
+          activeDownloads++;
+
+          const segmentFile = path.join(tempDir, `${index}.ts`);
+          let alreadyDownloaded = false;
+          try {
+            if (fs.existsSync(segmentFile)) {
+              const stat = fs.statSync(segmentFile);
+              if (stat.size > 0) {
+                alreadyDownloaded = true;
+              }
+            }
+          } catch (e) {}
+
+          if (alreadyDownloaded) {
+            this.currentSegments++;
+            await this.logProgress();
+            activeDownloads--;
+            startNext();
+            return;
+          }
+
+          const downloadSegment = async (retryCount = 0) => {
+            if (stopDownloading) return;
+            try {
+              let Segment = this.Segments[index];
+              if (!Segment) throw new Error("[ STOPPING ] Segment Missing!");
+
+              const response = await got(Segment, {
+                headers: this.headers ?? {},
+                responseType: "buffer",
+              });
+
+              await fs.promises.writeFile(segmentFile, response.body);
+              this.currentSegments++;
+              await this.logProgress();
+              activeDownloads--;
+              startNext();
+            } catch (err) {
+              const maxRetries = 5;
+              if (retryCount >= maxRetries) {
+                logger.warn(`Failed to download segment ${index} after ${maxRetries} attempts: ${err.message}. Writing empty segment to continue.`);
+                await fs.promises.writeFile(segmentFile, Buffer.alloc(0)).catch(() => {});
+                this.currentSegments++;
+                await this.logProgress();
+                activeDownloads--;
+                startNext();
+                return;
+              }
+              const delay = Math.min(30000, 5000 * Math.pow(2, retryCount));
+              this.logProgress(`Failed To Download Segment ${index}! ( Retrying in ${delay / 1000}s )`);
+              await new Promise((res) => setTimeout(res, delay));
+              await downloadSegment(retryCount + 1);
+            }
+          };
+
+          downloadSegment();
+        };
+
+        const workers = Math.min(CONCURRENCY, this.Segments.length);
+        for (let w = 0; w < workers; w++) {
+          startNext();
         }
-
-        try {
-          let Segment = this.Segments[i];
-          if (!Segment) throw new Error("[ STOPPING ] Segment Missing!");
-
-          const response = await got(Segment, {
-            headers: this.headers ?? {},
-            responseType: "buffer",
-          });
-
-          await fs.promises.writeFile(segmentFile, response.body);
-          this.currentSegments++;
-          await this.logProgress();
-          i++;
-          FailedSegments = 0;
-        } catch (err) {
-          if (FailedSegments > 3)
-            throw new Error(
-              "[ STOPPING ] '3' Times Segment Failed To Download!",
-            );
-          FailedSegments++;
-          this.logProgress(`Failed To Download Segment! ( Continuing in 5s )`);
-          console.log(err);
-          await new Promise((res) => setTimeout(res, 5000));
-        }
-      }
+      });
 
       // Concatenate segments
       this.logProgress("Concatenating segments...");
@@ -482,7 +517,7 @@ class downloader {
       ];
 
       await new Promise((resolve, reject) => {
-        const child = spawn(ffmpegPath, ffmpegArgs);
+        const child = spawn(ffmpegPath, ffmpegArgs, { stdio: "ignore" });
 
         child.on("close", (code) => {
           if (code !== 0) {
