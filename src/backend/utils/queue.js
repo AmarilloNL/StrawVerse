@@ -46,7 +46,7 @@ async function SaveQueueData(QueueData) {
 }
 
 // update the queue [ for storing how much downloaded ]
-async function updateQueue(epid, totalSegments, currentSegments) {
+async function updateQueue(epid, totalSegments, currentSegments, caption = null) {
   let Tosave = false;
   totalSegments = parseInt(totalSegments);
   currentSegments = parseInt(currentSegments);
@@ -55,6 +55,11 @@ async function updateQueue(epid, totalSegments, currentSegments) {
   if (indexToUpdate !== -1) {
     AnimeQueue[indexToUpdate].totalSegments = totalSegments;
     AnimeQueue[indexToUpdate].currentSegments = currentSegments;
+
+    if (caption && AnimeQueue[indexToUpdate].caption !== caption) {
+      AnimeQueue[indexToUpdate].caption = caption;
+      Tosave = true;
+    }
 
     const progressPercentage = Math.floor(
       (currentSegments / totalSegments) * 100,

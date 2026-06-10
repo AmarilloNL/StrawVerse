@@ -135,6 +135,22 @@ router.get("/api/version", (req, res) => {
   res.json({ version: app.getVersion() });
 });
 
+// Get application changelog / release notes
+router.get("/api/changelog", (req, res) => {
+  try {
+    const changelogPath = path.join(__dirname, "../../CHANGELOG.md");
+    if (fs.existsSync(changelogPath)) {
+      const changelog = fs.readFileSync(changelogPath, "utf-8");
+      res.json({ changelog });
+    } else {
+      res.status(404).json({ error: "Changelog file not found" });
+    }
+  } catch (err) {
+    logger.error("Failed to read changelog: " + err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Get all loaded providers with icon hints — served from locally downloaded icons
 router.get("/api/providers", (req, res) => {
   const toInfo = (name, scraper) => ({
@@ -258,7 +274,7 @@ router.post("/api/settings", async (req, res) => {
 router.post("/api/logger", async (req, res) => {
   const { caption, totalSegments, currentSegments, epid } = req.body;
   try {
-    let queue = (await updateQueue(epid, totalSegments, currentSegments)) ?? [];
+    let queue = (await updateQueue(epid, totalSegments, currentSegments, caption)) ?? [];
 
     if (currentSegments < totalSegments) {
       global.win.webContents.send("download-logger", {
@@ -708,9 +724,20 @@ router.post("/downloads", async (req, res) => {
   let itemWithSegments = queue.find((item) => item.currentSegments > 0);
 
   if (itemWithSegments) {
-    Response.caption = itemWithSegments.caption;
+    let caption = itemWithSegments.caption;
+    if (!caption) {
+      if (itemWithSegments.Type === "Anime") {
+        caption = `Downloading ${itemWithSegments.Title} || EP ${itemWithSegments.EpNum}`;
+      } else if (itemWithSegments.Type === "Manga") {
+        caption = `Downloading ${itemWithSegments.Title} || ${itemWithSegments.ChapterTitle || 'Chapter ' + itemWithSegments.EpNum}`;
+      } else {
+        caption = "Downloading...";
+      }
+    }
+    Response.caption = caption;
     Response.totalSegments = itemWithSegments.totalSegments;
     Response.currentSegments = itemWithSegments.currentSegments;
+    Response.epid = itemWithSegments.epid;
     Response.queue = queue.filter(
       (item) => item?.epid !== itemWithSegments?.epid,
     );
@@ -730,8 +757,18 @@ router.get("/api/download/remove", async (req, res) => {
       if (queue?.length > 0) {
         const itemWithSegments = queue.find((item) => item.totalSegments > 0);
         if (itemWithSegments) {
+          let caption = itemWithSegments.caption;
+          if (!caption) {
+            if (itemWithSegments.Type === "Anime") {
+              caption = `Downloading ${itemWithSegments.Title} || EP ${itemWithSegments.EpNum}`;
+            } else if (itemWithSegments.Type === "Manga") {
+              caption = `Downloading ${itemWithSegments.Title} || ${itemWithSegments.ChapterTitle || 'Chapter ' + itemWithSegments.EpNum}`;
+            } else {
+              caption = "Downloading...";
+            }
+          }
           global.win.webContents.send("download-logger", {
-            caption: itemWithSegments.caption,
+            caption,
             totalSegments: itemWithSegments.totalSegments,
             currentSegments: itemWithSegments.currentSegments,
             epid: itemWithSegments.epid,

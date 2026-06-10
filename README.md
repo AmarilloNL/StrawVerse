@@ -3,6 +3,12 @@
   <img src="https://capsule-render.vercel.app/api?type=soft&fontColor=703ee5&text=StrawVerse&height=150&fontSize=40&desc=Ridiculously%20efficient,%20fast%20and%20light-weight.&descAlignY=75&descAlign=50&color=00000000&animation=twinkling">
 </h1>
 
+<p align="center">
+  <a href="https://discord.gg/PzfUBgQ2gt">
+    <img src="https://img.shields.io/discord/1514335663875555470?color=7289da&label=Discord&logo=discord&style=for-the-badge" alt="Discord">
+  </a>
+</p>
+
 ## 💖 First Supporter
 
 Special thanks to the first person who supported the development of this project:
@@ -52,17 +58,20 @@ This is a Node.js-based anime & manga downloader that allows you to download ani
 ## Installation
 
 ### 💻 For Windows:
+
 1. Go to [StrawVerse Releases](https://github.com/TheYogMehta/StrawVerse/releases).
 2. Download the setup file `StrawVerse.Setup.<version>.exe`.
 3. Run the installer to install the application, and enjoy!
 
 ### 🐧 For Linux:
+
 1. Go to [StrawVerse Releases](https://github.com/TheYogMehta/StrawVerse/releases).
 2. Download the AppImage `StrawVerse-<version>.AppImage` or the snap package.
 3. For AppImage: Make it executable using `chmod +x StrawVerse-<version>.AppImage` and run it.
 
 ### 🍎 For Other OS (macOS, etc.):
-* Pre-built binaries are not currently provided. You can run the application by cloning the repository, installing the dependencies, and running it locally. See the **[Build the Application](#build-the-application)** section below for step-by-step instructions.
+
+- Pre-built binaries are not currently provided. You can run the application by cloning the repository, installing the dependencies, and running it locally. See the **[Build the Application](#build-the-application)** section below for step-by-step instructions.
 
 ## Usage
 
@@ -94,6 +103,7 @@ This is a Node.js-based anime & manga downloader that allows you to download ani
 ## Uninstalling the Application
 
 ### 💻 For Windows:
+
 To delete the application, navigate to the following directory:
 
 ```
@@ -103,6 +113,7 @@ C:\Users\USERNAME\AppData\Local\Programs\StrawVerse
 Then, run `Uninstall StrawVerse.exe`.
 
 ### 🐧 For Linux:
+
 - **AppImage:** Simply delete the downloaded `.AppImage` file. If you want to clean up application configurations, delete the `~/.config/strawverse` directory.
 - **Snap:** Run the following command in your terminal:
   ```bash
@@ -127,8 +138,8 @@ Follow these steps to build application:
    - [Python Download](https://www.python.org/downloads/)
 
 4. **C++ Build Tools (Windows only, required for compiling native SQLite node modules via node-gyp)**
-   * During the Node.js installation on Windows, make sure you check the box that says **"Automatically install the necessary tools"** (this installs Python and the necessary VS Build Tools via Chocolatey automatically).
-   * Alternatively, you can manually download and install **[Visual Studio Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/)** (be sure to select the **Desktop development with C++** workload during setup).
+   - During the Node.js installation on Windows, make sure you check the box that says **"Automatically install the necessary tools"** (this installs Python and the necessary VS Build Tools via Chocolatey automatically).
+   - Alternatively, you can manually download and install **[Visual Studio Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/)** (be sure to select the **Desktop development with C++** workload during setup).
 
 ## Steps to Build
 
@@ -166,4 +177,4 @@ Follow these steps to build application:
 - Build (package): Creates installer/executable files for Windows (`.exe`) and Linux (`.AppImage`, `.snap`) in the `dist` directory.
 - Start: Runs the app locally in the Electron environment without building an executable.
 - Ensure that your system has the latest versions of Node.js and Git installed for compatibility.
-- If you encounter any issues open an issue.
+- If you encounter any issues, feel free to open an issue or join our [Discord Server](https://discord.gg/PzfUBgQ2gt) for support and chat!

@@ -1,6 +1,6 @@
 /* eslint-disable react-hooks/set-state-in-effect, react-hooks/exhaustive-deps */
 import { useState, useEffect } from "react";
-import { Loader2, LogOut, CheckCircle, Trash2 } from "lucide-react";
+import { Loader2, LogOut, CheckCircle, Trash2, MessageSquare } from "lucide-react";
 import Swal from "sweetalert2";
 import "./css/SettingsView.css";
 
@@ -32,6 +32,9 @@ export default function SettingsView({ onMarketplaceOpen }) {
   const [historyList, setHistoryList] = useState([]);
   const [statsLoading, setStatsLoading] = useState(false);
 
+  const [changelog, setChangelog] = useState("");
+  const [changelogLoading, setChangelogLoading] = useState(false);
+
   useEffect(() => {
     if (activeTab === "history") {
       const loadHistoryData = async () => {
@@ -53,6 +56,26 @@ export default function SettingsView({ onMarketplaceOpen }) {
       loadHistoryData();
     }
   }, [activeTab]);
+
+  useEffect(() => {
+    if (activeTab === "changelog" && !changelog) {
+      const fetchChangelogData = async () => {
+        setChangelogLoading(true);
+        try {
+          const res = await fetch("/api/changelog");
+          const data = await res.json();
+          if (data.changelog) {
+            setChangelog(data.changelog);
+          }
+        } catch (err) {
+          console.error("Failed to fetch changelog:", err);
+        } finally {
+          setChangelogLoading(false);
+        }
+      };
+      fetchChangelogData();
+    }
+  }, [activeTab, changelog]);
 
   const fetchSettings = async () => {
     setLoading(true);
@@ -352,6 +375,13 @@ export default function SettingsView({ onMarketplaceOpen }) {
         >
           History & Stats
         </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab("changelog")}
+          className={`settings-tab-btn ${activeTab === "changelog" ? "active" : ""}`}
+        >
+          Release Notes
+        </button>
       </div>
 
       <form onSubmit={(e) => e.preventDefault()} className="settings-form">
@@ -394,6 +424,33 @@ export default function SettingsView({ onMarketplaceOpen }) {
                   <option value="on">Enabled (Page Buttons)</option>
                   <option value="off">Disabled (Infinite Scroll)</option>
                 </select>
+              </div>
+            </div>
+
+            <div className="settings-panel glass-panel">
+              <h2 className="settings-panel-title">Community & Support</h2>
+              <div className="settings-input-wrapper" style={{ gap: '10px' }}>
+                <span className="settings-hint" style={{ fontSize: '13px', lineHeight: '1.5' }}>
+                  Join our Discord community to chat with other members, request features, report issues, and stay updated!
+                </span>
+                <a
+                  href="https://discord.gg/PzfUBgQ2gt"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="settings-connect-link"
+                  style={{
+                    backgroundColor: '#5865F2',
+                    boxShadow: '0 4px 12px rgba(88, 101, 242, 0.25)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '8px',
+                    marginTop: '8px'
+                  }}
+                >
+                  <MessageSquare size={16} />
+                  <span>Join Discord Server</span>
+                </a>
               </div>
             </div>
           </div>
@@ -787,7 +844,109 @@ export default function SettingsView({ onMarketplaceOpen }) {
             )}
           </div>
         )}
+
+        {activeTab === "changelog" && (
+          <div className="settings-panel glass-panel">
+            <h2 className="settings-panel-title">Release Notes / Changelog</h2>
+            {changelogLoading ? (
+              <div className="settings-loading-center">
+                <Loader2 size={32} className="spin" />
+                <p>Loading release notes...</p>
+              </div>
+            ) : changelog ? (
+              <ChangelogRenderer markdown={changelog} />
+            ) : (
+              <p style={{ color: "var(--text-muted)", fontSize: "13px" }}>
+                Failed to load release notes.
+              </p>
+            )}
+          </div>
+        )}
       </form>
     </div>
   );
+}
+
+function ChangelogRenderer({ markdown }) {
+  if (!markdown) return null;
+
+  const lines = markdown.split("\n");
+  return (
+    <div className="changelog-container">
+      {lines.map((line, idx) => {
+        if (line.startsWith("# ")) {
+          return (
+            <h1 key={idx} className="changelog-h1">
+              {line.replace("# ", "")}
+            </h1>
+          );
+        }
+        if (line.startsWith("## ")) {
+          return (
+            <h2 key={idx} className="changelog-h2">
+              {line.replace("## ", "")}
+            </h2>
+          );
+        }
+        if (line.startsWith("### ")) {
+          return (
+            <h3 key={idx} className="changelog-h3">
+              {line.replace("### ", "")}
+            </h3>
+          );
+        }
+        if (line.startsWith("- ")) {
+          return (
+            <li key={idx} className="changelog-li">
+              {parseMarkdownLinks(line.replace("- ", ""))}
+            </li>
+          );
+        }
+        if (line.trim() === "") {
+          return <div key={idx} style={{ height: "8px" }} />;
+        }
+        return (
+          <p key={idx} className="changelog-p">
+            {parseMarkdownLinks(line)}
+          </p>
+        );
+      })}
+    </div>
+  );
+}
+
+function parseMarkdownLinks(text) {
+  const linkRegex = /\[([^\]]+)\]\(([^)]+)\)/g;
+  const parts = [];
+  let lastIndex = 0;
+  let match;
+
+  while ((match = linkRegex.exec(text)) !== null) {
+    const [fullMatch, linkText, url] = match;
+    const matchIndex = match.index;
+
+    if (matchIndex > lastIndex) {
+      parts.push(text.substring(lastIndex, matchIndex));
+    }
+
+    parts.push(
+      <a
+        key={matchIndex}
+        href={url}
+        target="_blank"
+        rel="noreferrer"
+        className="changelog-link"
+      >
+        {linkText}
+      </a>,
+    );
+
+    lastIndex = linkRegex.lastIndex;
+  }
+
+  if (lastIndex < text.length) {
+    parts.push(text.substring(lastIndex));
+  }
+
+  return parts.length > 0 ? parts : text;
 }

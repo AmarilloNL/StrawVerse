@@ -153,7 +153,11 @@ const createWindow = () => {
   global.win.webContents.on("will-navigate", (event, url) => {
     event.preventDefault();
 
-    if (url.startsWith("https://myanimelist.net")) {
+    if (
+      url.startsWith("https://myanimelist.net") ||
+      url.includes("discord.gg") ||
+      url.includes("discord.com")
+    ) {
       shell.openExternal(url);
     } else {
       global.win.loadURL(url);
@@ -161,7 +165,11 @@ const createWindow = () => {
   });
 
   global.win.webContents.setWindowOpenHandler(({ url }) => {
-    if (url.startsWith("https://myanimelist.net")) {
+    if (
+      url.startsWith("https://myanimelist.net") ||
+      url.includes("discord.gg") ||
+      url.includes("discord.com")
+    ) {
       shell.openExternal(url);
       return { action: "deny" };
     }

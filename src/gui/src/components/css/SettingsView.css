@@ -315,3 +315,59 @@
 .spin {
   color: var(--accent);
 }
+
+.changelog-container {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-width: 100%;
+  padding: 12px 0 0 0;
+}
+
+.changelog-h1 {
+  font-size: 20px;
+  font-weight: 800;
+  color: white;
+  margin-bottom: 12px;
+  border-bottom: 2px solid var(--accent);
+  padding-bottom: 6px;
+}
+
+.changelog-h2 {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--accent);
+  margin-top: 18px;
+  margin-bottom: 8px;
+}
+
+.changelog-h3 {
+  font-size: 14px;
+  font-weight: 600;
+  color: #a78bfa;
+  margin-top: 12px;
+  margin-bottom: 6px;
+}
+
+.changelog-p {
+  font-size: 13px;
+  color: var(--text-muted);
+  line-height: 1.6;
+}
+
+.changelog-li {
+  font-size: 13px;
+  color: var(--text-main);
+  line-height: 1.6;
+  margin-left: 20px;
+  list-style-type: disc;
+}
+
+.changelog-link {
+  color: #3b82f6;
+  text-decoration: none;
+}
+
+.changelog-link:hover {
+  text-decoration: underline;
+}
