@@ -922,7 +922,7 @@ function parseMarkdownLinks(text) {
   let match;
 
   while ((match = linkRegex.exec(text)) !== null) {
-    const [fullMatch, linkText, url] = match;
+    const [, linkText, url] = match;
     const matchIndex = match.index;
 
     if (matchIndex > lastIndex) {

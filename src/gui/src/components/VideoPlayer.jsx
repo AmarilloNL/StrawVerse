@@ -1,7 +1,7 @@
 /* eslint-disable react-hooks/set-state-in-effect, react-hooks/exhaustive-deps */
 import { useEffect, useRef, useState } from "react";
 import Hls from "hls.js";
-import { ArrowLeft, HardDrive, Globe } from "lucide-react";
+import { ArrowLeft, HardDrive, Globe, Play, Pause, Volume2, VolumeX, Maximize, Minimize, ChevronLeft, ChevronRight } from "lucide-react";
 import "./css/VideoPlayer.css";
 
 export default function VideoPlayer({
@@ -18,11 +18,66 @@ export default function VideoPlayer({
 }) {
   const videoRef = useRef(null);
   const hlsRef = useRef(null);
+  const wrapperRef = useRef(null);
+  const uiTimeoutRef = useRef(null);
+  const indicatorTimeoutRef = useRef(null);
+  const abortControllerRef = useRef(null);
+
   const [sources, setSources] = useState([]);
   const [subtitles, setSubtitles] = useState([]);
   const [selectedSource, setSelectedSource] = useState(null);
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState("");
+
+  const [showUI, setShowUI] = useState(true);
+  const [indicator, setIndicator] = useState({ visible: false, icon: null, text: "" });
+
+  const resetUITimeout = () => {
+    setShowUI(true);
+    if (uiTimeoutRef.current) {
+      clearTimeout(uiTimeoutRef.current);
+    }
+    if (videoRef.current && !videoRef.current.paused) {
+      uiTimeoutRef.current = setTimeout(() => {
+        setShowUI(false);
+      }, 3000);
+    }
+  };
+
+  const showIndicator = (icon, text) => {
+    setIndicator({ visible: true, icon, text });
+    if (indicatorTimeoutRef.current) {
+      clearTimeout(indicatorTimeoutRef.current);
+    }
+    indicatorTimeoutRef.current = setTimeout(() => {
+      setIndicator({ visible: false, icon: null, text: "" });
+    }, 600);
+  };
+
+  const toggleFullscreen = () => {
+    if (!document.fullscreenElement) {
+      const wrapper = wrapperRef.current;
+      if (wrapper) {
+        if (wrapper.requestFullscreen) {
+          wrapper.requestFullscreen();
+        } else if (wrapper.webkitRequestFullscreen) {
+          wrapper.webkitRequestFullscreen();
+        } else if (wrapper.msRequestFullscreen) {
+          wrapper.msRequestFullscreen();
+        }
+        showIndicator(Maximize, "Fullscreen");
+      }
+    } else {
+      if (document.exitFullscreen) {
+        document.exitFullscreen();
+      } else if (document.webkitExitFullscreen) {
+        document.webkitExitFullscreen();
+      } else if (document.msExitFullscreen) {
+        document.msExitFullscreen();
+      }
+      showIndicator(Minimize, "Exit Fullscreen");
+    }
+  };
 
   // Local navigation states
   const [currentEpisode, setCurrentEpisode] = useState(episodeNumOrId);
@@ -217,8 +272,18 @@ export default function VideoPlayer({
   }, [selectedSource, currentEpisode, currentEpisodeObj]);
 
   const fetchStreamData = async () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    abortControllerRef.current = new AbortController();
+    const signal = abortControllerRef.current?.signal;
+
     setLoading(true);
     setErrorMsg("");
+    setSources([]);
+    setSubtitles([]);
+    setSelectedSource(null);
+
     try {
       const response = await fetch("/api/watch", {
         method: "POST",
@@ -238,14 +303,14 @@ export default function VideoPlayer({
                 provider: provider,
               },
         ),
+        signal,
       });
       const data = await response.json();
 
-      let fetchedSources = [];
-      let fetchedSubs = [];
+      if (signal?.aborted) return;
 
-      fetchedSources = data?.sources || [];
-      fetchedSubs = data?.subtitles || [];
+      let fetchedSources = data?.sources || [];
+      let fetchedSubs = data?.subtitles || [];
 
       setSources(fetchedSources);
       setSubtitles(fetchedSubs);
@@ -260,10 +325,16 @@ export default function VideoPlayer({
         setErrorMsg("No video sources found for this episode.");
       }
     } catch (err) {
+      if (err.name === "AbortError") {
+        console.log("Fetch aborted");
+        return;
+      }
       console.error(err);
       setErrorMsg("Failed to load video player resources.");
     } finally {
-      setLoading(false);
+      if (!signal?.aborted) {
+        setLoading(false);
+      }
     }
   };
 
@@ -276,6 +347,11 @@ export default function VideoPlayer({
       hlsRef.current = null;
     }
     fetchStreamData();
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    };
   }, [id, currentEpisode, isCurrentDownloaded, playerSubDub]);
 
   useEffect(() => {
@@ -406,8 +482,160 @@ export default function VideoPlayer({
     };
   }, []);
 
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      resetUITimeout();
+    };
+
+    document.addEventListener("fullscreenchange", handleFullscreenChange);
+    document.addEventListener("webkitfullscreenchange", handleFullscreenChange);
+    document.addEventListener("mozfullscreenchange", handleFullscreenChange);
+    document.addEventListener("MSFullscreenChange", handleFullscreenChange);
+
+    return () => {
+      document.removeEventListener("fullscreenchange", handleFullscreenChange);
+      document.removeEventListener(
+        "webkitfullscreenchange",
+        handleFullscreenChange,
+      );
+      document.removeEventListener(
+        "mozfullscreenchange",
+        handleFullscreenChange,
+      );
+      document.removeEventListener(
+        "MSFullscreenChange",
+        handleFullscreenChange,
+      );
+    };
+  }, []);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    const onPlay = () => {
+      resetUITimeout();
+    };
+
+    const onPause = () => {
+      setShowUI(true);
+      if (uiTimeoutRef.current) {
+        clearTimeout(uiTimeoutRef.current);
+      }
+    };
+
+    video.addEventListener("play", onPlay);
+    video.addEventListener("pause", onPause);
+
+    return () => {
+      video.removeEventListener("play", onPlay);
+      video.removeEventListener("pause", onPause);
+    };
+  }, [selectedSource]);
+
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      const active = document.activeElement;
+      if (
+        active &&
+        (active.tagName === "INPUT" ||
+          active.tagName === "TEXTAREA" ||
+          active.tagName === "SELECT" ||
+          active.isContentEditable)
+      ) {
+        return;
+      }
+
+      const video = videoRef.current;
+      if (!video) return;
+
+      resetUITimeout();
+
+      switch (e.key.toLowerCase()) {
+        case " ":
+        case "k":
+          e.preventDefault();
+          if (video.paused) {
+            video.play().catch(() => {});
+            showIndicator(Play, "Play");
+          } else {
+            video.pause();
+            showIndicator(Pause, "Pause");
+          }
+          break;
+
+        case "f":
+          e.preventDefault();
+          toggleFullscreen();
+          break;
+
+        case "arrowleft":
+        case "j":
+          e.preventDefault();
+          video.currentTime = Math.max(0, video.currentTime - 10);
+          showIndicator(ChevronLeft, "-10s");
+          break;
+
+        case "arrowright":
+        case "l":
+          e.preventDefault();
+          video.currentTime = Math.min(
+            video.duration || 0,
+            video.currentTime + 10,
+          );
+          showIndicator(ChevronRight, "+10s");
+          break;
+
+        case "arrowup": {
+          e.preventDefault();
+          const nextVol = Math.min(1, video.volume + 0.1);
+          video.volume = nextVol;
+          if (video.muted) {
+            video.muted = false;
+          }
+          showIndicator(Volume2, `${Math.round(nextVol * 100)}%`);
+          break;
+        }
+
+        case "arrowdown": {
+          e.preventDefault();
+          const prevVol = Math.max(0, video.volume - 0.1);
+          video.volume = prevVol;
+          showIndicator(Volume2, `${Math.round(prevVol * 100)}%`);
+          break;
+        }
+
+        case "m":
+          e.preventDefault();
+          video.muted = !video.muted;
+          showIndicator(video.muted ? VolumeX : Volume2, video.muted ? "Muted" : "Unmuted");
+          break;
+
+        default:
+          break;
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [selectedSource]);
+
+  useEffect(() => {
+    return () => {
+      if (uiTimeoutRef.current) clearTimeout(uiTimeoutRef.current);
+      if (indicatorTimeoutRef.current)
+        clearTimeout(indicatorTimeoutRef.current);
+    };
+  }, []);
+
   return (
-    <div className="player-wrapper">
+    <div
+      ref={wrapperRef}
+      className={`player-wrapper ${!showUI ? "hide-ui" : ""}`}
+      onMouseMove={resetUITimeout}
+    >
       {/* Header controls */}
       <div className="player-controls-header">
         <button onClick={onBack} className="player-back-btn">
@@ -435,6 +663,12 @@ export default function VideoPlayer({
 
       {/* Main player viewport */}
       <div className="player-viewport">
+        {indicator.visible && (
+          <div className="player-indicator-overlay">
+            {indicator.icon && <indicator.icon size={36} />}
+            {indicator.text && <span className="player-indicator-text">{indicator.text}</span>}
+          </div>
+        )}
         {loading ? (
           <div className="player-status-overlay">
             <img src="/images/loading.gif" alt="loading" />
@@ -453,6 +687,7 @@ export default function VideoPlayer({
             ref={videoRef}
             controls
             controlsList="nodownload"
+            onDoubleClick={toggleFullscreen}
             onContextMenu={(e) => e.preventDefault()}
             className="player-video"
             crossOrigin="anonymous"

@@ -1,5 +1,5 @@
 /* eslint-disable react-hooks/set-state-in-effect, react-hooks/exhaustive-deps, no-unused-vars */
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import "./css/Catalog.css";
 import {
   Search,
@@ -16,6 +16,8 @@ import {
 import Swal from "sweetalert2";
 
 export default function Catalog({ type, provider, onSelectMedia }) {
+  const lastRequestRef = useRef(null);
+
   const [data, setData] = useState({
     results: [],
     totalPages: 0,
@@ -56,6 +58,9 @@ export default function Catalog({ type, provider, onSelectMedia }) {
     searchOverride = null,
     linkingOverride = undefined,
   ) => {
+    const currentRequestId = Math.random();
+    lastRequestRef.current = currentRequestId;
+
     setLoading(true);
     setErrorMsg("");
     try {
@@ -84,6 +89,10 @@ export default function Catalog({ type, provider, onSelectMedia }) {
       if (!response.ok) throw new Error("Network error fetching catalog data.");
       const resData = await response.json();
 
+      if (lastRequestRef.current !== currentRequestId) {
+        return;
+      }
+
       if (resData?.extension_missing) {
         setErrorMsg(
           `Extension missing. Please install a provider for ${type} in Settings.`,
@@ -111,12 +120,17 @@ export default function Catalog({ type, provider, onSelectMedia }) {
         }
       }
     } catch (err) {
+      if (lastRequestRef.current !== currentRequestId) {
+        return;
+      }
       console.error(err);
       setErrorMsg(
         "Failed to load data. Please verify your settings or server connection.",
       );
     } finally {
-      setLoading(false);
+      if (lastRequestRef.current === currentRequestId) {
+        setLoading(false);
+      }
     }
   };
 
@@ -126,10 +140,10 @@ export default function Catalog({ type, provider, onSelectMedia }) {
     fetchData(1, activeFilters, "", null);
   };
 
-  // Trigger fetch when catalog view or filter dependencies change
   useEffect(() => {
     setCurrentPage(1);
     setLinkingMalItem(null);
+    setSearchQuery("");
     fetchData(1, {}, "", null);
     setActiveFilters({});
 

@@ -984,7 +984,6 @@ router.post("/api/watch", async (req, res) => {
         videoData.subtitles = SourcesData?.subtitleFiles;
       }
 
-      // Subtitles : TODO
       res.status(200).json(videoData);
     }
   } catch (err) {
