@@ -1,5 +1,10 @@
 # Changelog
 
+## [7.1.1] - 2026-06-15
+
+- fix playback/downloading issues regarding anikoto
+- moved changelog.md location
+
 ## [7.1.0] - 2026-06-11
 
 ### Scraper & Video Player Optimizations
