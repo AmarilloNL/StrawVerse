@@ -743,8 +743,8 @@ class downloader {
         }
 
         child.on("close", (code) => {
-          logger.info(`[Merge] FFmpeg output:\n${ffmpegOutput}`);
           if (code !== 0) {
+            logger.error(`[Merge] FFmpeg output:\n${ffmpegOutput}`);
             return reject(new Error(`FFmpeg exited with code ${code}`));
           }
           resolve();
