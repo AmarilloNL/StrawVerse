@@ -2763,9 +2763,9 @@ router.get("/api/transcode-segment", async (req, res) => {
 
     child.stdout.pipe(res);
 
+    let ffmpegErr = "";
     child.stderr.on("data", (data) => {
-      const msg = data.toString().trim();
-      if (msg) logger.debug(`[transcode-segment] ffmpeg: ${msg}`);
+      ffmpegErr += data.toString();
     });
 
     child.on("error", (err) => {
@@ -2774,7 +2774,7 @@ router.get("/api/transcode-segment", async (req, res) => {
 
     child.on("close", (code) => {
       if (code !== 0 && code !== null) {
-        logger.warn(`[transcode-segment] ffmpeg exited with code ${code}`);
+        logger.warn(`[transcode-segment] ffmpeg exited with code ${code}. Output:\n${ffmpegErr}`);
       }
       if (!res.writableEnded) res.end();
     });
