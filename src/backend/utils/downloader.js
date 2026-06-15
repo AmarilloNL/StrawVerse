@@ -847,4 +847,4 @@ async function download(args) {
   }
 }
 
-module.exports = { download };
+module.exports = { download, getFfmpegPath, stripPngHeader };

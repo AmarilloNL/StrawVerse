@@ -91,7 +91,7 @@ function getHeaders(url) {
   };
 
   // kwik - animepahe
-  if (url.includes("owocdn.top")) {
+  if (url.includes("owocdn.top") || url.includes("uwucdn.top")) {
     headers.Referer = "https://kwik.cx/";
   } else if (url.includes("kwik.cx")) {
     headers.Referer = "https://animepahe.pw/";

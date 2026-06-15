@@ -2603,4 +2603,195 @@ router.get("/api/history/list", async (req, res) => {
   }
 });
 
+const segmentKeyCache = {};
+
+// HLS playlist rewriter proxy
+router.get("/api/stream-hls-proxy", async (req, res) => {
+  const { url, referer } = req.query;
+  if (!url) return res.status(400).json({ error: "Missing url parameter" });
+
+  const { getHeaders } = require("./utils/proxyHeaders");
+  const streamHeaders = getHeaders(url);
+  if (referer && !streamHeaders.Referer) streamHeaders.Referer = referer;
+
+  try {
+    const m3u8Res = await axios.get(url, {
+      headers: streamHeaders,
+      responseType: "text",
+    });
+    let m3u8 = m3u8Res.data.replace(/mp4a\.40\.(5|29)/g, "mp4a.40.2");
+
+    const lines = m3u8.split("\n");
+    const rewrittenLines = [];
+    let currentKeyUrl = null;
+    let currentKeyIv = null;
+    let mediaSequence = 0;
+    let segIdx = 0;
+
+    for (let line of lines) {
+      line = line.trim();
+      if (!line) continue;
+
+      if (line.startsWith("#EXT-X-MEDIA-SEQUENCE:")) {
+        mediaSequence = parseInt(line.split(":")[1]) || 0;
+        rewrittenLines.push(line);
+      } else if (line.startsWith("#EXT-X-KEY:")) {
+        const uriMatch = line.match(/URI="([^"]+)"/);
+        const ivMatch = line.match(/IV=0x([0-9a-fA-F]+)/);
+        const methodMatch = line.match(/METHOD=([^,]+)/);
+        if (methodMatch && methodMatch[1] === "AES-128" && uriMatch) {
+          currentKeyUrl = new URL(uriMatch[1], url).href;
+          currentKeyIv = ivMatch ? ivMatch[1] : null;
+        } else {
+          rewrittenLines.push(line);
+        }
+      } else if (line.startsWith("#")) {
+        rewrittenLines.push(line);
+      } else {
+        const absoluteSegUrl = new URL(line, url).href;
+        const params = new URLSearchParams({
+          url: absoluteSegUrl,
+        });
+        if (referer) params.set("referer", referer);
+        if (currentKeyUrl) {
+          params.set("keyUrl", currentKeyUrl);
+          if (currentKeyIv) params.set("keyIv", currentKeyIv);
+          params.set("index", (mediaSequence + segIdx).toString());
+        }
+
+        const rewrittenSegUrl = `/api/transcode-segment?${params.toString()}`;
+        rewrittenLines.push(rewrittenSegUrl);
+        segIdx++;
+      }
+    }
+
+    res.setHeader("Content-Type", "application/x-mpegURL");
+    res.setHeader("Cache-Control", "no-cache");
+    res.send(rewrittenLines.join("\n"));
+  } catch (err) {
+    logger.error(`[stream-hls-proxy] Error: ${err.message}`);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Transcode individual TS segment (decrypts if needed, transcodes audio to AAC-LC)
+router.get("/api/transcode-segment", async (req, res) => {
+  const { url, referer, keyUrl, keyIv, index } = req.query;
+  if (!url) return res.status(400).json({ error: "Missing url parameter" });
+
+  const { spawn } = require("child_process");
+
+  let ffmpegPath;
+  let stripPngHeader;
+  try {
+    const downloader = require("./utils/downloader");
+    ffmpegPath = await downloader.getFfmpegPath();
+    stripPngHeader = downloader.stripPngHeader;
+  } catch (err) {
+    logger.error(`[transcode-segment] ffmpeg not found: ${err.message}`);
+    return res.status(500).json({ error: "ffmpeg not available" });
+  }
+
+  const crypto = require("crypto");
+  const { getHeaders } = require("./utils/proxyHeaders");
+  const segHeaders = getHeaders(url);
+  if (referer && !segHeaders.Referer) segHeaders.Referer = referer;
+
+  try {
+    // 1. Download segment
+    const segRes = await axios.get(url, {
+      headers: segHeaders,
+      responseType: "arraybuffer",
+    });
+    let segData = Buffer.from(segRes.data);
+
+    // Strip PNG header wrapper if present
+    segData = stripPngHeader(segData);
+
+    // 2. Decrypt segment if keys are provided
+    if (keyUrl) {
+      let key;
+      if (segmentKeyCache[keyUrl]) {
+        key = segmentKeyCache[keyUrl];
+      } else {
+        const keySegHeaders = getHeaders(keyUrl);
+        if (referer && !keySegHeaders.Referer) keySegHeaders.Referer = referer;
+        const keyRes = await axios.get(keyUrl, {
+          headers: keySegHeaders,
+          responseType: "arraybuffer",
+        });
+        key = Buffer.from(keyRes.data);
+        segmentKeyCache[keyUrl] = key;
+      }
+
+      const iv = Buffer.alloc(16);
+      if (keyIv) {
+        Buffer.from(keyIv, "hex").copy(iv);
+      } else if (index) {
+        iv.writeUInt32BE(parseInt(index), 12);
+      }
+
+      const decipher = crypto.createDecipheriv("aes-128-cbc", key, iv);
+      segData = Buffer.concat([decipher.update(segData), decipher.final()]);
+    }
+
+    // 3. Transcode using ffmpeg (pipe TS in -> pipe TS out with transcoded audio)
+    // CRITICAL: We MUST use -copyts to preserve the original presentation timestamps (PTS/DTS)
+    // of the input segment so that hls.js can play the stream continuously without buffer gaps!
+    const args = [
+      "-y",
+      "-loglevel",
+      "warning",
+      "-copyts",
+      "-f",
+      "mpegts",
+      "-i",
+      "pipe:0",
+      "-c:v",
+      "copy",
+      "-c:a",
+      "aac",
+      "-f",
+      "mpegts",
+      "pipe:1",
+    ];
+
+    res.setHeader("Content-Type", "video/mp2t");
+    res.setHeader("Cache-Control", "no-cache");
+
+    const child = spawn(ffmpegPath, args);
+
+    child.stdout.pipe(res);
+
+    child.stderr.on("data", (data) => {
+      const msg = data.toString().trim();
+      if (msg) logger.debug(`[transcode-segment] ffmpeg: ${msg}`);
+    });
+
+    child.on("error", (err) => {
+      logger.error(`[transcode-segment] ffmpeg error: ${err.message}`);
+    });
+
+    child.on("close", (code) => {
+      if (code !== 0 && code !== null) {
+        logger.warn(`[transcode-segment] ffmpeg exited with code ${code}`);
+      }
+      if (!res.writableEnded) res.end();
+    });
+
+    req.on("close", () => {
+      if (child && !child.killed) child.kill("SIGTERM");
+    });
+
+    // Write decrypted TS data to ffmpeg stdin
+    child.stdin.write(segData);
+    child.stdin.end();
+  } catch (err) {
+    logger.error(`[transcode-segment] Error: ${err.message}`);
+    if (!res.headersSent) {
+      res.status(500).json({ error: err.message });
+    }
+  }
+});
+
 module.exports = router;

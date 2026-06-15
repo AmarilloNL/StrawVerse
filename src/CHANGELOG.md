@@ -1,5 +1,9 @@
 # Changelog
 
+## [7.1.2] - 2026-06-16
+
+- fix playback/downloading issues regarding animepahe
+
 ## [7.1.1] - 2026-06-15
 
 - fix playback/downloading issues regarding anikoto

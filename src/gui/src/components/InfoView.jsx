@@ -595,32 +595,7 @@ export default function InfoView({
           }
         } else {
           // Bulk download
-          if (details?.subOrDub === "both") {
-            const result = await Swal.fire({
-              title: "Select Language",
-              text: "Choose language to download for selected episodes",
-              icon: "question",
-              showDenyButton: true,
-              showCancelButton: true,
-              confirmButtonText: "Download SUB",
-              denyButtonText: "Download DUB",
-              cancelButtonText: "Cancel",
-              background: "var(--bg-secondary)",
-              color: "var(--text-main)",
-              confirmButtonColor: "var(--accent)",
-              denyButtonColor: "var(--bg-tertiary)",
-            });
-
-            if (result.isDismissed && !result.isConfirmed && !result.isDenied) {
-              return; // user cancelled
-            }
-
-            chosenLang = result.isConfirmed ? "sub" : "dub";
-          } else if (details?.subOrDub === "dub") {
-            chosenLang = "dub";
-          } else {
-            chosenLang = "sub";
-          }
+          chosenLang = dubSelect;
         }
       }
 
@@ -1586,10 +1561,11 @@ export default function InfoView({
               {details?.provider && details?.provider !== "local source" && (
                 <>
                   {type === "Anime" &&
-                    details?.subOrDub === "both" &&
-                    episodesOrChapters.some(
+                    (episodesOrChapters.some(
                       (ep) => ep.lang === "both" || ep.lang === "dub",
-                    ) && (
+                    ) ||
+                      (details?.DownloadedEpisodes?.dub &&
+                        details.DownloadedEpisodes.dub.length > 0)) && (
                       <select
                         value={dubSelect}
                         onChange={(e) => setDubSelect(e.target.value)}

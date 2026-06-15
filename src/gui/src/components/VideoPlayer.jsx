@@ -64,6 +64,23 @@ export default function VideoPlayer({
   const [isMuted, setIsMuted] = useState(false);
   const [buffered, setBuffered] = useState(0);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [useTranscodeFallback, setUseTranscodeFallback] = useState(false);
+
+  const sourceUrl =
+    typeof selectedSource?.url === "string"
+      ? selectedSource.url
+      : selectedSource?.url && typeof selectedSource.url === "object"
+        ? selectedSource.url.url
+        : "";
+  const isKwikCdn = sourceUrl.includes("owocdn.top") || sourceUrl.includes("uwucdn.top");
+  const needsTranscode = useTranscodeFallback || isKwikCdn;
+
+  const transcodeUrl = (() => {
+    const referer = selectedSource?.headers?.Referer || selectedSource?.headers?.referer || "";
+    const params = new URLSearchParams({ url: sourceUrl });
+    if (referer) params.set("referer", referer);
+    return `/api/stream-hls-proxy?${params.toString()}`;
+  })();
 
   const formatTime = (time) => {
     if (isNaN(time) || time === Infinity) return "0:00";
@@ -437,6 +454,7 @@ export default function VideoPlayer({
 
       setSources(fetchedSources);
       setSubtitles(fetchedSubs);
+      setUseTranscodeFallback(false);
 
       if (fetchedSources.length > 0) {
         const preferred =
@@ -525,18 +543,7 @@ export default function VideoPlayer({
 
     const video = videoRef.current;
 
-    let url;
-    if (
-      selectedSource?.url &&
-      typeof selectedSource.url === "object" &&
-      selectedSource.url.url
-    ) {
-      url = selectedSource.url.url;
-    } else if (typeof selectedSource?.url === "string") {
-      url = selectedSource.url;
-    } else {
-      url = selectedSource?.url || "";
-    }
+
 
     if (hlsRef.current) {
       hlsRef.current.destroy();
@@ -544,18 +551,14 @@ export default function VideoPlayer({
     }
     video.src = "";
 
-    const selectedSourceUrlStr =
-      typeof selectedSource?.url === "string"
-        ? selectedSource.url
-        : selectedSource?.url &&
-            typeof selectedSource.url === "object" &&
-            selectedSource.url.url
-          ? selectedSource.url.url
-          : "";
+    setDuration(0);
+
+    const url = needsTranscode ? transcodeUrl : sourceUrl;
 
     const isM3U8 =
+      needsTranscode ||
       url.includes(".m3u8") ||
-      selectedSourceUrlStr.includes(".m3u8") ||
+      sourceUrl.includes(".m3u8") ||
       selectedSource?.isM3U8;
 
     if (isM3U8) {
@@ -630,13 +633,26 @@ export default function VideoPlayer({
                   console.warn(
                     `Media decoding warning: retrying recovery attempt ${mediaErrorRetry}...`,
                   );
+                  if (mediaErrorRetry > 1) {
+                    console.warn(
+                      "Swapping audio codec to bypass HE-AAC decode loop...",
+                    );
+                    hls.swapAudioCodec();
+                  }
                   hls.recoverMediaError();
                 } else {
                   console.error("Fatal media error: recovery loop prevented.");
-                  setErrorMsg(
-                    "Playback error: Try selecting a different quality level.",
-                  );
                   hls.destroy();
+                  if (!useTranscodeFallback) {
+                    console.warn(
+                      "Switching to FFmpeg audio transcode fallback...",
+                    );
+                    setUseTranscodeFallback(true);
+                  } else {
+                    setErrorMsg(
+                      "Playback error: Try selecting a different quality level.",
+                    );
+                  }
                 }
                 break;
               default:
@@ -670,7 +686,7 @@ export default function VideoPlayer({
       };
       video.addEventListener("loadedmetadata", handleLoadedMetadata);
     }
-  }, [selectedSource]);
+  }, [selectedSource, useTranscodeFallback, sourceUrl, needsTranscode]);
 
   useEffect(() => {
     return () => {

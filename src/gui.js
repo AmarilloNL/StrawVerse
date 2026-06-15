@@ -137,6 +137,10 @@ function normalizeHttpOrigin(value) {
 }
 
 function setRefererHeaders(headers, referer) {
+  for (const k of Object.keys(headers)) {
+    if (k.toLowerCase() === "referer") delete headers[k];
+    if (k.toLowerCase() === "origin") delete headers[k];
+  }
   const originReferer = normalizeHttpOrigin(referer);
   if (originReferer) {
     headers.Referer = originReferer;
@@ -148,7 +152,13 @@ function setRefererHeaders(headers, referer) {
 
 function mergeCookie(headers, cookie) {
   if (!cookie) return;
-  const existingCookie = headers.Cookie || headers.cookie || "";
+  let existingCookie = "";
+  for (const k of Object.keys(headers)) {
+    if (k.toLowerCase() === "cookie") {
+      existingCookie = headers[k];
+      delete headers[k];
+    }
+  }
   if (!existingCookie) {
     headers.Cookie = cookie;
     return;
@@ -269,7 +279,21 @@ const createWindow = () => {
     "ensure-cf-bypass",
     async (event, targetUrl, sourceReferer) => {
       try {
+        if (!targetUrl) return { ok: true };
+        if (targetUrl.startsWith("file:") || targetUrl.startsWith("data:") || targetUrl.startsWith("/")) {
+          return { ok: true };
+        }
         const urlObj = new URL(targetUrl);
+        const hostname = urlObj.hostname.toLowerCase();
+        if (
+          hostname === "localhost" ||
+          hostname === "127.0.0.1" ||
+          hostname.includes("owocdn.top") ||
+          hostname.includes("uwucdn.top") ||
+          hostname.includes("kwik.cx")
+        ) {
+          return { ok: true };
+        }
         const domain = getParentDomain(urlObj.hostname);
         const explicitReferer = normalizeHttpOrigin(sourceReferer);
         if (explicitReferer && global.setDynamicReferer) {
