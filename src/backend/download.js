@@ -1,5 +1,5 @@
 // imports
-const { animeinfo, MangaInfo } = require("./utils/AnimeManga");
+const { animeinfo, MangaInfo, fetchEpisode, fetchChapters } = require("./utils/AnimeManga");
 const { providerFetch, settingfetch } = require("./utils/settings");
 const {
   addToQueue,
@@ -39,6 +39,23 @@ async function downloadAnimeMulti(
 
   const config = await settingfetch();
   const Animeprovider = await providerFetch("Anime", provider);
+
+  const needsResolution = Episodes.some((ep) => !ep.id);
+  if (needsResolution) {
+    try {
+      const allEps = await fetchAllEpisodes(Animeprovider, animeid);
+      Episodes.forEach((ep) => {
+        if (!ep.id) {
+          const matched = allEps.find((x) => Number(x.number) === Number(ep.number));
+          if (matched) {
+            ep.id = matched.id;
+          }
+        }
+      });
+    } catch (err) {
+      console.error(`Error resolving episode IDs: ${err.message}`);
+    }
+  }
 
   for (let i = 0; i < Episodes.length; i++) {
     let Episode = Episodes[i];
@@ -222,6 +239,23 @@ async function downloadMangaMulti(
   const config = await settingfetch();
   const Mangaprovider = await providerFetch("Manga", provider);
 
+  const needsResolution = Chapters.some((ch) => !ch.id);
+  if (needsResolution) {
+    try {
+      const allChs = await fetchAllChapters(Mangaprovider, mangaid);
+      Chapters.forEach((ch) => {
+        if (!ch.id) {
+          const matched = allChs.find((x) => Number(x.number) === Number(ch.number));
+          if (matched) {
+            ch.id = matched.id;
+          }
+        }
+      });
+    } catch (err) {
+      console.error(`Error resolving chapter IDs: ${err.message}`);
+    }
+  }
+
   for (let i = 0; i < Chapters.length; i++) {
     let Chapter = Chapters[i];
     let data = await downloadMangaSingle(
@@ -347,6 +381,52 @@ async function downloadMangaSingle(
       message: `${err.message}`,
     };
   }
+}
+
+async function fetchAllEpisodes(Animeprovider, animeid) {
+  let allEps = [];
+  const firstPage = await fetchEpisode(Animeprovider, animeid, 1);
+  if (firstPage && firstPage.episodes) {
+    allEps = [...firstPage.episodes];
+    const totalPages = firstPage.totalPages || 1;
+
+    if (totalPages > 1) {
+      const promises = [];
+      for (let p = 2; p <= totalPages; p++) {
+        promises.push(fetchEpisode(Animeprovider, animeid, p));
+      }
+      const results = await Promise.all(promises);
+      for (const res of results) {
+        if (res && res.episodes) {
+          allEps = [...allEps, ...res.episodes];
+        }
+      }
+    }
+  }
+  return allEps;
+}
+
+async function fetchAllChapters(Mangaprovider, mangaid) {
+  let allChs = [];
+  const firstPage = await fetchChapters(Mangaprovider, mangaid, 1);
+  if (firstPage && firstPage.Chapters) {
+    allChs = [...firstPage.Chapters];
+    const totalPages = firstPage.totalPages || 1;
+
+    if (totalPages > 1) {
+      const promises = [];
+      for (let p = 2; p <= totalPages; p++) {
+        promises.push(fetchChapters(Mangaprovider, mangaid, p));
+      }
+      const results = await Promise.all(promises);
+      for (const res of results) {
+        if (res && res.Chapters) {
+          allChs = [...allChs, ...res.Chapters];
+        }
+      }
+    }
+  }
+  return allChs;
 }
 
 module.exports = {

@@ -2088,8 +2088,8 @@ router.post("/api/local/delete-episode", async (req, res) => {
     if (!fs.existsSync(typeDir)) {
       const idStripped = id.replace(/-(dub|sub|both)$/, "");
       const downloads = global.db
-        .prepare("SELECT * FROM Anime WHERE id = ?")
-        .all(`${idStripped}-${subdub}`);
+        .prepare("SELECT * FROM Anime WHERE id = ? OR id = ? OR id = ?")
+        .all(`${idStripped}-${subdub}`, id, idStripped);
       if (downloads && downloads.length > 0) {
         const folderName =
           downloads[0].folder_name ||
@@ -2161,8 +2161,8 @@ router.post("/api/local/delete-multiple", async (req, res) => {
       if (type === "Anime") {
         const idStripped = id.replace(/-(dub|sub|both)$/, "");
         const downloads = global.db
-          .prepare("SELECT * FROM Anime WHERE id = ?")
-          .all(subdub ? `${idStripped}-${subdub}` : id);
+          .prepare("SELECT * FROM Anime WHERE id = ? OR id = ? OR id = ?")
+          .all(subdub ? `${idStripped}-${subdub}` : id, id, idStripped);
         if (downloads && downloads.length > 0) {
           const folderName =
             downloads[0].folder_name ||
@@ -2171,8 +2171,8 @@ router.post("/api/local/delete-multiple", async (req, res) => {
         }
       } else {
         const downloads = global.db
-          .prepare("SELECT * FROM Manga WHERE id = ?")
-          .all(id);
+          .prepare("SELECT * FROM Manga WHERE id = ? OR id = ?")
+          .all(id, id.replace(/-(dub|sub|both)$/, ""));
         if (downloads && downloads.length > 0) {
           const folderName =
             downloads[0].folder_name ||

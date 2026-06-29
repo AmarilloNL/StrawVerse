@@ -833,6 +833,27 @@ class downloader {
   async CleanEverything(everything = false) {
     await fs.promises.unlink(this.SegmentsFile).catch(() => {});
 
+    if (this.MergeSubtitles) {
+      const subsDir = path.join(this.directory, "subs");
+      if (fs.existsSync(subsDir)) {
+        try {
+          const files = fs.readdirSync(subsDir);
+          const prefix = `${this.Epnum}Ep.`;
+          for (const file of files) {
+            if (file.startsWith(prefix)) {
+              fs.unlinkSync(path.join(subsDir, file));
+            }
+          }
+          const remainingFiles = fs.readdirSync(subsDir);
+          if (remainingFiles.length === 0) {
+            fs.rmdirSync(subsDir);
+          }
+        } catch (e) {
+          logger.error(`Failed to clean up subs: ${e.message}`);
+        }
+      }
+    }
+
     if (everything) {
       await fs.promises.unlink(this.mp4).catch(() => {});
 

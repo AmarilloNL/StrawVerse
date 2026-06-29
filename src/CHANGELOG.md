@@ -1,5 +1,24 @@
 # Changelog
 
+## [7.2.2] - 2026-06-29
+
+### Bulk Selection & Keybinds
+
+- **Selection Controls**: Select items with a single click, or select a range with **Ctrl + Click** (Shift+Click is disabled).
+- **Sticky Actions Bar**: The selection controls now stick to the top of your screen as you scroll down the episode list.
+- **Clear Selections**: Quickly clear all active checkmarks using the new red "Clear Selected" button.
+- **Range Input Validation**: Displays a red border glow when you type invalid characters in the range selector.
+
+### Custom Dropdowns & Sorting
+
+- **Custom Sort Dropdowns**: Replaced the native sort button with a premium custom dropdown selector that matches the Source Provider dropdown.
+- **Downloaded Sort Filter**: Added a new **Sort: DOWNLOADED** option that filters the view to show only downloaded episodes/chapters.
+
+### Bug Fixes
+
+- **Local Deletion Resolution**: Fixed an issue where deleting local files failed with a "folder not found on disk" error after switching active provider tabs.
+- **Subtitle Auto-Cleanup**: Automatically deletes downloaded subtitle files after they have been successfully merged into the video file.
+
 ## [7.2.1] - 2026-06-29
 
 ### Performance & Idle CPU Optimizations

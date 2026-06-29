@@ -63,15 +63,109 @@ export default function InfoView({
   const [pendingPlayEpisodeNum, setPendingPlayEpisodeNum] = useState(null);
   const [detectedPageSize, setDetectedPageSize] = useState(30);
 
-  const [sortOrder, setSortOrder] = useState("asc"); // 'asc' or 'desc'
+  const [selectedItems, setSelectedItems] = useState(new Set());
+  const [dubSelect, setDubSelect] = useState("sub");
+  const [rangeInput, setRangeInput] = useState("");
+  const [lastClickedId, setLastClickedId] = useState(null);
+  const [isRangeInputInvalid, setIsRangeInputInvalid] = useState(false);
+  const [sortOrder, setSortOrder] = useState("asc");
+  const [sortDirection, setSortDirection] = useState("asc");
+
+  const isDownloaded = (itemNum, subdub = "sub") => {
+    const num = parseFloat(itemNum);
+    if (isNaN(num)) return false;
+    if (type === "Anime") {
+      const list = details?.DownloadedEpisodes?.[subdub] || [];
+      return list.map(Number).includes(num);
+    } else {
+      const list = details?.DownloadedChapters || [];
+      return list.map(Number).includes(num);
+    }
+  };
+
+  const isItemFullyDownloaded = (item) => {
+    if (type !== "Anime") {
+      return isDownloaded(item.number, "sub");
+    }
+    if (dubSelect === "sub") {
+      return isDownloaded(item.number, "sub");
+    } else if (dubSelect === "dub") {
+      return isDownloaded(item.number, "dub");
+    }
+    return false;
+  };
+
+  const hasDownloads =
+    type === "Anime"
+      ? details?.DownloadedEpisodes?.sub?.length > 0 ||
+        details?.DownloadedEpisodes?.dub?.length > 0
+      : details?.DownloadedChapters?.length > 0;
 
   const sortedItems = useMemo(() => {
+    if (sortOrder === "downloaded") {
+      const allDownloadedNums =
+        type === "Anime"
+          ? Array.from(
+              new Set(
+                [
+                  ...(details?.DownloadedEpisodes?.sub || []),
+                  ...(details?.DownloadedEpisodes?.dub || []),
+                ].map(Number),
+              ),
+            ).sort((a, b) => a - b)
+          : Array.from(
+              new Set((details?.DownloadedChapters || []).map(Number)),
+            ).sort((a, b) => a - b);
+
+      allDownloadedNums.sort((a, b) =>
+        sortDirection === "asc" ? a - b : b - a,
+      );
+
+      return allDownloadedNums.map((num) => {
+        const existingItem = episodesOrChapters.find(
+          (item) => Number(item.number) === num,
+        );
+        if (existingItem) return existingItem;
+
+        if (type === "Anime") {
+          const subList = details?.DownloadedEpisodes?.sub || [];
+          const dubList = details?.DownloadedEpisodes?.dub || [];
+          return {
+            id: `local-ep-${num}`,
+            number: String(num),
+            title: `Episode ${num}`,
+            hasDub: dubList.map(Number).includes(num),
+            lang:
+              subList.map(Number).includes(num) &&
+              dubList.map(Number).includes(num)
+                ? "both"
+                : dubList.map(Number).includes(num)
+                  ? "dub"
+                  : "sub",
+          };
+        } else {
+          return {
+            id: `local-ch-${num}`,
+            number: String(num),
+            title: `Chapter ${num}`,
+          };
+        }
+      });
+    }
+
     return [...episodesOrChapters].sort((a, b) => {
       const numA = parseFloat(a.number) || 0;
       const numB = parseFloat(b.number) || 0;
       return sortOrder === "asc" ? numA - numB : numB - numA;
     });
-  }, [episodesOrChapters, sortOrder]);
+  }, [
+    episodesOrChapters,
+    sortOrder,
+    sortDirection,
+    details?.DownloadedEpisodes,
+    details?.DownloadedChapters,
+    dubSelect,
+  ]);
 
   const filteredItems = useMemo(() => {
     if (!episodeSearchQuery.trim()) return sortedItems;
@@ -82,10 +176,6 @@ export default function InfoView({
       return numStr.includes(query) || titleStr.includes(query);
     });
   }, [sortedItems, episodeSearchQuery]);
-
-  // Selection for bulk downloads
-  const [selectedItems, setSelectedItems] = useState(new Set());
-  const [dubSelect, setDubSelect] = useState("sub"); // sub or dub for anime downloads
 
   // MAL Status Sync form states
   const [malSyncing, setMalSyncing] = useState(false);
@@ -105,12 +195,16 @@ export default function InfoView({
       plan_to_read: "Plan To Read",
       reading: "Reading",
     };
-    return labels[status] || status.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+    return (
+      labels[status] ||
+      status.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())
+    );
   };
 
-  const malStatusOptions = type === "Anime"
-    ? ["plan_to_watch", "watching", "completed", "on_hold", "dropped"]
-    : ["plan_to_read", "reading", "completed", "on_hold", "dropped"];
+  const malStatusOptions =
+    type === "Anime"
+      ? ["plan_to_watch", "watching", "completed", "on_hold", "dropped"]
+      : ["plan_to_read", "reading", "completed", "on_hold", "dropped"];
   const [newTagInput, setNewTagInput] = useState("");
 
   // Inline MAL Search states
@@ -129,6 +223,10 @@ export default function InfoView({
   const providerDropdownRef = useRef(null);
   const [isMalStatusDropdownOpen, setIsMalStatusDropdownOpen] = useState(false);
   const malStatusDropdownRef = useRef(null);
+  const [isSortDropdownOpen, setIsSortDropdownOpen] = useState(false);
+  const sortDropdownRef = useRef(null);
+  const [isDubDropdownOpen, setIsDubDropdownOpen] = useState(false);
+  const dubDropdownRef = useRef(null);
   const hasAutoPlayed = useRef(false);
 
   const fetchDetails = async (isInitial = false) => {
@@ -391,6 +489,18 @@ export default function InfoView({
       ) {
         setIsMalStatusDropdownOpen(false);
       }
+      if (
+        sortDropdownRef.current &&
+        !sortDropdownRef.current.contains(event.target)
+      ) {
+        setIsSortDropdownOpen(false);
+      }
+      if (
+        dubDropdownRef.current &&
+        !dubDropdownRef.current.contains(event.target)
+      ) {
+        setIsDubDropdownOpen(false);
+      }
     };
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
@@ -413,13 +523,6 @@ export default function InfoView({
   useEffect(() => {
     setSelectedItems(new Set());
   }, [dubSelect]);
-
-  useEffect(() => {
-    if (autoPlay && !loading && !itemsLoading && !hasAutoPlayed.current) {
-      hasAutoPlayed.current = true;
-      handleContinueWatchRead();
-    }
-  }, [autoPlay, loading, itemsLoading]);
 
   useEffect(() => {
     if (pendingPlayEpisodeNum && !itemsLoading) {
@@ -500,34 +603,171 @@ export default function InfoView({
     hasAnyProgress && maxEpNumber > 0 && nextToPlay > maxEpNumber;
 
   // Bulk Selection Helper
-  const handleSelectToggle = (itemId) => {
+  const handleSelectToggle = (itemNum) => {
     const nextSelected = new Set(selectedItems);
-    if (nextSelected.has(itemId)) {
-      nextSelected.delete(itemId);
+    const num = Number(itemNum);
+    if (nextSelected.has(num)) {
+      nextSelected.delete(num);
     } else {
-      nextSelected.add(itemId);
+      nextSelected.add(num);
+    }
+    setSelectedItems(nextSelected);
+  };
+
+  const isNumberInRange = (num, rangeStr) => {
+    const parts = rangeStr.split(",");
+    for (let part of parts) {
+      part = part.trim();
+      if (!part) continue;
+      if (part.includes("-")) {
+        const [startStr, endStr] = part.split("-");
+        const start = parseFloat(startStr);
+        const end = parseFloat(endStr);
+        if (!isNaN(start) && !isNaN(end)) {
+          const min = Math.min(start, end);
+          const max = Math.max(start, end);
+          if (num >= min && num <= max) return true;
+        }
+      } else {
+        const single = parseFloat(part);
+        if (!isNaN(single) && num === single) return true;
+      }
+    }
+    return false;
+  };
+
+  const validateRangeInput = (str) => {
+    if (!str.trim()) return true;
+    const parts = str.split(",");
+    const partRegex = /^\s*\d+(?:\.\d+)?\s*(?:-\s*\d+(?:\.\d+)?\s*)?$/;
+    return parts.every((part) => {
+      const trimmed = part.trim();
+      if (!trimmed) return false;
+      return partRegex.test(trimmed);
+    });
+  };
+
+  const handleSelectRange = (rangeStr, isSelect = true) => {
+    if (!rangeStr.trim() || !validateRangeInput(rangeStr)) return;
+    const nextSelected = new Set(selectedItems);
+
+    const parts = rangeStr.split(",");
+    for (let part of parts) {
+      part = part.trim();
+      if (!part) continue;
+      if (part.includes("-")) {
+        const [startStr, endStr] = part.split("-");
+        const start = parseFloat(startStr);
+        const end = parseFloat(endStr);
+        if (!isNaN(start) && !isNaN(end)) {
+          const min = Math.min(start, end);
+          const max = Math.max(start, end);
+          for (let i = Math.ceil(min); i <= Math.floor(max); i++) {
+            if (isSelect) {
+              nextSelected.add(i);
+            } else {
+              nextSelected.delete(i);
+            }
+          }
+          if (isSelect) {
+            nextSelected.add(start);
+            nextSelected.add(end);
+          } else {
+            nextSelected.delete(start);
+            nextSelected.delete(end);
+          }
+        }
+      } else {
+        const single = parseFloat(part);
+        if (!isNaN(single)) {
+          if (isSelect) {
+            nextSelected.add(single);
+          } else {
+            nextSelected.delete(single);
+          }
+        }
+      }
+    }
+
+    episodesOrChapters.forEach((item) => {
+      if (!isItemUnavailable(item)) {
+        const num = parseFloat(item.number);
+        if (!isNaN(num) && isNumberInRange(num, rangeStr)) {
+          if (isSelect) {
+            nextSelected.add(num);
+          } else {
+            nextSelected.delete(num);
+          }
+        }
+      }
+    });
+
+    setSelectedItems(nextSelected);
+  };
+
+  const handleItemClick = (e, item) => {
+    if (isItemUnavailable(item)) return;
+
+    if (
+      e.target.closest("button") ||
+      e.target.closest("select") ||
+      e.target.closest("a")
+    ) {
+      return;
+    }
+
+    if (e.shiftKey) {
+      return;
+    }
+
+    const nextSelected = new Set(selectedItems);
+    const visibleNumbers = filteredItems.map((x) => Number(x.number));
+    const currentNum = Number(item.number);
+    const currentIndex = visibleNumbers.indexOf(currentNum);
+
+    const isCtrl = e.ctrlKey || e.metaKey;
+
+    if (isCtrl && lastClickedId !== null) {
+      const lastIndex = visibleNumbers.indexOf(lastClickedId);
+      if (lastIndex !== -1) {
+        const start = Math.min(lastIndex, currentIndex);
+        const end = Math.max(lastIndex, currentIndex);
+
+        for (let i = start; i <= end; i++) {
+          const targetItem = filteredItems[i];
+          if (!isItemUnavailable(targetItem)) {
+            nextSelected.add(Number(targetItem.number));
+          }
+        }
+      }
+    } else {
+      if (nextSelected.has(currentNum)) {
+        nextSelected.delete(currentNum);
+      } else {
+        nextSelected.add(currentNum);
+      }
+      setLastClickedId(currentNum);
     }
     setSelectedItems(nextSelected);
   };
 
   const handleSelectAll = () => {
-    const selectableItems = episodesOrChapters.filter(
-      (item) => !isItemUnavailable(item),
-    );
-    const selectableIds = selectableItems.map((item) => item.id);
-    const allSelected =
-      selectableIds.length > 0 &&
-      selectableIds.every((id) => selectedItems.has(id));
+    const nextSelected = new Set(selectedItems);
+    const allSelected = selectedItems.size >= totalItemsCount;
 
     if (allSelected) {
-      const nextSelected = new Set(selectedItems);
-      selectableIds.forEach((id) => nextSelected.delete(id));
-      setSelectedItems(nextSelected);
+      nextSelected.clear();
     } else {
-      const nextSelected = new Set(selectedItems);
-      selectableIds.forEach((id) => nextSelected.add(id));
-      setSelectedItems(nextSelected);
+      for (let i = 1; i <= totalItemsCount; i++) {
+        nextSelected.add(i);
+      }
+      episodesOrChapters.forEach((item) => {
+        if (!isItemUnavailable(item)) {
+          nextSelected.add(Number(item.number));
+        }
+      });
     }
+    setSelectedItems(nextSelected);
   };
 
   const handleContinueWatchRead = async () => {
@@ -557,6 +797,13 @@ export default function InfoView({
       }
     }
   };
+
+  useEffect(() => {
+    if (autoPlay && !loading && !itemsLoading && !hasAutoPlayed.current) {
+      hasAutoPlayed.current = true;
+      handleContinueWatchRead();
+    }
+  }, [autoPlay, loading, itemsLoading]);
 
   const handleStartFromBegin = () => {
     const sorted = [...episodesOrChapters].sort(
@@ -708,13 +955,25 @@ export default function InfoView({
           ...(isAnime ? { subdub: chosenLang } : {}),
         };
       } else {
-        const selectedList = episodesOrChapters.filter((item) =>
-          selectedItems.has(item.id),
-        );
-        const selectedNotDownloaded = selectedList.filter(
-          (item) => !isItemFullyDownloaded(item) && !isItemUnavailable(item),
-        );
-        const itemsToDownload = selectedNotDownloaded;
+        const itemsToDownload = [];
+        selectedItems.forEach((num) => {
+          const loadedItem = episodesOrChapters.find(
+            (item) => Number(item.number) === num,
+          );
+          if (loadedItem) {
+            if (
+              !isItemFullyDownloaded(loadedItem) &&
+              !isItemUnavailable(loadedItem)
+            ) {
+              itemsToDownload.push({
+                id: loadedItem.id,
+                number: loadedItem.number,
+              });
+            }
+          } else {
+            itemsToDownload.push({ id: null, number: num });
+          }
+        });
         bodyData = {
           id: id,
           [isAnime ? "Episodes" : "Chapters"]: itemsToDownload,
@@ -895,9 +1154,14 @@ export default function InfoView({
 
   const saveTags = async (updatedTag) => {
     try {
-      const activeProvider = (details?.provider && details.provider !== "provider" && details.provider !== "local source") 
-        ? details.provider 
-        : (localMalProvider !== "provider" && localMalProvider !== "local" ? localMalProvider : undefined);
+      const activeProvider =
+        details?.provider &&
+        details.provider !== "provider" &&
+        details.provider !== "local source"
+          ? details.provider
+          : localMalProvider !== "provider" && localMalProvider !== "local"
+            ? localMalProvider
+            : undefined;
 
       const response = await fetch("/api/local/tags/add", {
         method: "POST",
@@ -1241,15 +1505,16 @@ export default function InfoView({
   // Bulk Delete Trigger
   const handleBulkDelete = async () => {
     const isAnime = type === "Anime";
-    const selectedList = episodesOrChapters.filter((item) =>
-      selectedItems.has(item.id),
-    );
-    const selectedDownloaded = selectedList.filter((item) =>
-      isItemFullyDownloaded(item),
-    );
+    const selectedDownloaded = Array.from(selectedItems).filter((num) => {
+      if (isAnime) {
+        return isDownloaded(num, "sub") || isDownloaded(num, "dub");
+      } else {
+        return isDownloaded(num);
+      }
+    });
     if (selectedDownloaded.length === 0) return;
 
-    const numbersToDelete = selectedDownloaded.map((item) => item.number);
+    const numbersToDelete = selectedDownloaded;
     const confirmResult = await Swal.fire({
       title: `Delete Selected ${isAnime ? "Episode(s)" : "Chapter(s)"}?`,
       text: `Are you sure you want to delete ${numbersToDelete.length} downloaded ${isAnime ? "episode(s)" : "chapter(s)"}?`,
@@ -1300,30 +1565,6 @@ export default function InfoView({
     } catch (err) {
       console.error(err);
     }
-  };
-
-  const isDownloaded = (itemNum, subdub = "sub") => {
-    const num = parseFloat(itemNum);
-    if (isNaN(num)) return false;
-    if (type === "Anime") {
-      const list = details?.DownloadedEpisodes?.[subdub] || [];
-      return list.map(Number).includes(num);
-    } else {
-      const list = details?.DownloadedChapters || [];
-      return list.map(Number).includes(num);
-    }
-  };
-
-  const isItemFullyDownloaded = (item) => {
-    if (type !== "Anime") {
-      return isDownloaded(item.number, "sub");
-    }
-    if (dubSelect === "sub") {
-      return isDownloaded(item.number, "sub");
-    } else if (dubSelect === "dub") {
-      return isDownloaded(item.number, "dub");
-    }
-    return false;
   };
 
   const isItemUnavailable = (item) => {
@@ -1400,21 +1641,23 @@ export default function InfoView({
     (item) => !isItemUnavailable(item),
   );
   const allSelectableSelected =
-    selectableItems.length > 0 &&
-    selectableItems.every((item) => selectedItems.has(item.id));
+    selectedItems.size >= totalItemsCount && totalItemsCount > 0;
 
-  const selectedList = episodesOrChapters.filter((item) =>
-    selectedItems.has(item.id),
-  );
-  const selectedDownloaded = selectedList.filter((item) =>
-    isItemFullyDownloaded(item),
-  );
-  const selectedNotDownloaded = selectedList.filter(
-    (item) => !isItemFullyDownloaded(item) && !isItemUnavailable(item),
-  );
+  const numToDownload = Array.from(selectedItems).filter((num) => {
+    const downloaded =
+      type === "Anime"
+        ? isDownloaded(num, "sub") || isDownloaded(num, "dub")
+        : isDownloaded(num);
+    return !downloaded;
+  }).length;
 
-  const numToDownload = selectedNotDownloaded.length;
-  const numToDelete = selectedDownloaded.length;
+  const numToDelete = Array.from(selectedItems).filter((num) => {
+    const downloaded =
+      type === "Anime"
+        ? isDownloaded(num, "sub") || isDownloaded(num, "dub")
+        : isDownloaded(num);
+    return downloaded;
+  }).length;
 
   return (
     <div className="info-wrapper">
@@ -1582,18 +1825,28 @@ export default function InfoView({
 
               {/* Source Provider selector */}
               {details?.provider && (
-                <div className="input-group" style={{ minWidth: "180px", position: "relative" }} ref={providerDropdownRef}>
+                <div
+                  className="input-group"
+                  style={{ minWidth: "180px", position: "relative" }}
+                  ref={providerDropdownRef}
+                >
                   <label className="input-label">Source Provider</label>
-                  {details.linkedProviders && details.linkedProviders.length > 1 ? (
+                  {details.linkedProviders &&
+                  details.linkedProviders.length > 1 ? (
                     <>
-                      <div 
+                      <div
                         className={`custom-dropdown-trigger ${isProviderDropdownOpen ? "open" : ""}`}
-                        onClick={() => setIsProviderDropdownOpen(!isProviderDropdownOpen)}
+                        onClick={() =>
+                          setIsProviderDropdownOpen(!isProviderDropdownOpen)
+                        }
                       >
                         <span className="custom-dropdown-trigger-text">
                           {details.provider}
                         </span>
-                        <ChevronDown className="custom-dropdown-chevron" size={16} />
+                        <ChevronDown
+                          className="custom-dropdown-chevron"
+                          size={16}
+                        />
                       </div>
 
                       {isProviderDropdownOpen && (
@@ -1602,19 +1855,25 @@ export default function InfoView({
                             .filter(
                               (p, index, self) =>
                                 p.provider !== "provider" &&
-                                self.findIndex((t) => t.provider === p.provider) ===
-                                index,
+                                self.findIndex(
+                                  (t) => t.provider === p.provider,
+                                ) === index,
                             )
                             .map((p) => (
-                              <div 
-                                key={p.provider} 
+                              <div
+                                key={p.provider}
                                 className={`custom-dropdown-item ${details.provider === p.provider ? "selected" : ""}`}
                                 onClick={() => {
-                                  const selectedRecord = details.linkedProviders.find(
-                                    (record) => record.provider === p.provider,
-                                  );
+                                  const selectedRecord =
+                                    details.linkedProviders.find(
+                                      (record) =>
+                                        record.provider === p.provider,
+                                    );
                                   if (selectedRecord) {
-                                    handleProviderSwitch(selectedRecord.id, p.provider);
+                                    handleProviderSwitch(
+                                      selectedRecord.id,
+                                      p.provider,
+                                    );
                                   }
                                   setIsProviderDropdownOpen(false);
                                 }}
@@ -1627,7 +1886,9 @@ export default function InfoView({
                     </>
                   ) : (
                     <div className="provider-static-badge">
-                      {details.provider === "local source" ? "📁 Local Source" : details.provider}
+                      {details.provider === "local source"
+                        ? "📁 Local Source"
+                        : details.provider}
                     </div>
                   )}
                 </div>
@@ -1692,23 +1953,32 @@ export default function InfoView({
                       className="input-val"
                     />
                   </div>
-                  <div className="input-group" style={{ minWidth: "160px", position: "relative" }} ref={malStatusDropdownRef}>
+                  <div
+                    className="input-group"
+                    style={{ minWidth: "160px", position: "relative" }}
+                    ref={malStatusDropdownRef}
+                  >
                     <label className="input-label">Status</label>
-                    <div 
+                    <div
                       className={`custom-dropdown-trigger ${isMalStatusDropdownOpen ? "open" : ""}`}
-                      onClick={() => setIsMalStatusDropdownOpen(!isMalStatusDropdownOpen)}
+                      onClick={() =>
+                        setIsMalStatusDropdownOpen(!isMalStatusDropdownOpen)
+                      }
                     >
                       <span className="custom-dropdown-trigger-text">
                         {getMalStatusLabel(malStatus)}
                       </span>
-                      <ChevronDown className="custom-dropdown-chevron" size={16} />
+                      <ChevronDown
+                        className="custom-dropdown-chevron"
+                        size={16}
+                      />
                     </div>
 
                     {isMalStatusDropdownOpen && (
                       <div className="custom-dropdown-menu">
                         {malStatusOptions.map((statusOption) => (
-                          <div 
-                            key={statusOption} 
+                          <div
+                            key={statusOption}
                             className={`custom-dropdown-item ${malStatus === statusOption ? "selected" : ""}`}
                             onClick={() => {
                               setMalStatus(statusOption);
@@ -1774,114 +2044,259 @@ export default function InfoView({
       <div className="items-section">
         <div className="section-header">
           <h2>{type === "Anime" ? "Episodes List" : "Chapters List"}</h2>
-          {episodesOrChapters.length > 0 && (
-            <div className="bulk-actions">
-              {/* In-Page Search Input */}
-              <div className="search-wrapper">
-                <Search size={14} className="search-icon" />
-                <input
-                  type="text"
-                  placeholder={
-                    type === "Anime" ? "Search episode..." : "Search chapter..."
-                  }
-                  value={episodeSearchQuery}
-                  onChange={(e) => setEpisodeSearchQuery(e.target.value)}
-                  className="search-input-box"
-                />
-                {episodeSearchQuery && (
-                  <button
-                    onClick={() => setEpisodeSearchQuery("")}
-                    className="btn-search-clear"
-                  >
-                    <X size={12} />
-                  </button>
-                )}
-              </div>
-              {/* Sort Button */}
-              <button
-                onClick={() => {
-                  const newOrder = sortOrder === "asc" ? "desc" : "asc";
-                  setSortOrder(newOrder);
-                  const isAnimePahe =
-                    details?.provider?.toLowerCase() === "animepahe" ||
-                    details?.provider?.toLowerCase() === "pahe";
-                  if (isAnimePahe) {
-                    if (newOrder === "asc") {
-                      fetchItems(totalPages);
-                    } else {
-                      fetchItems(1);
-                    }
-                  }
-                }}
-                className="btn-bulk"
-                title={`Sort by number: ${sortOrder === "asc" ? "Ascending" : "Descending"}`}
-              >
-                <ArrowUpDown
-                  size={14}
-                  style={{
-                    marginRight: "6px",
-                    verticalAlign: "middle",
-                    display: "inline-block",
-                  }}
-                />
-                Sort: {sortOrder.toUpperCase()}
-              </button>
-
-              {/* Action buttons if online provider is available */}
-              {details?.provider && details?.provider !== "local source" && (
-                <>
-                  {type === "Anime" &&
-                    (episodesOrChapters.some(
-                      (ep) => ep.lang === "both" || ep.lang === "dub",
-                    ) ||
-                      (details?.DownloadedEpisodes?.dub &&
-                        details.DownloadedEpisodes.dub.length > 0)) && (
-                      <select
-                        value={dubSelect}
-                        onChange={(e) => setDubSelect(e.target.value)}
-                        className="select-val"
-                      >
-                        <option value="sub">SUB</option>
-                        <option value="dub">DUB</option>
-                      </select>
-                    )}
-                  <button
-                    onClick={handleSelectAll}
-                    style={{
-                      opacity: selectableItems.length === 0 ? 0.5 : 1,
-                      cursor:
-                        selectableItems.length === 0
-                          ? "not-allowed"
-                          : "pointer",
-                    }}
-                    className="btn-bulk"
-                    disabled={selectableItems.length === 0}
-                  >
-                    {allSelectableSelected ? "Deselect All" : "Select All"}
-                  </button>
-                  {numToDownload > 0 && (
-                    <button
-                      onClick={() => handleDownload()}
-                      className="btn-download-all"
-                    >
-                      <Download size={16} />
-                      <span>Download Checked ({numToDownload})</span>
-                    </button>
-                  )}
-                  {numToDelete > 0 && (
-                    <button
-                      onClick={handleBulkDelete}
-                      className="btn-delete-show"
-                    >
-                      <Trash2 size={16} />
-                      <span>Delete Checked ({numToDelete})</span>
-                    </button>
-                  )}
-                </>
+        </div>
+        {episodesOrChapters.length > 0 && (
+          <div className="bulk-actions">
+            {/* In-Page Search Input */}
+            <div className="search-wrapper">
+              <Search size={14} className="search-icon" />
+              <input
+                type="text"
+                placeholder={
+                  type === "Anime" ? "Search episode..." : "Search chapter..."
+                }
+                value={episodeSearchQuery}
+                onChange={(e) => setEpisodeSearchQuery(e.target.value)}
+                className="search-input-box"
+              />
+              {episodeSearchQuery && (
+                <button
+                  onClick={() => setEpisodeSearchQuery("")}
+                  className="btn-search-clear"
+                >
+                  <X size={12} />
+                </button>
               )}
             </div>
-          )}
-        </div>
+            {/* Sort Selector */}
+            <div
+              className="input-group"
+              style={{ minWidth: "120px", position: "relative" }}
+              ref={sortDropdownRef}
+            >
+              <div
+                className={`custom-dropdown-trigger ${isSortDropdownOpen ? "open" : ""}`}
+                onClick={() => setIsSortDropdownOpen(!isSortDropdownOpen)}
+                style={{ minHeight: "38px" }}
+              >
+                <span className="custom-dropdown-trigger-text">
+                  Sort:{" "}
+                  {sortOrder === "downloaded"
+                    ? `DOWNLOADED (${sortDirection.toUpperCase()})`
+                    : sortOrder.toUpperCase()}
+                </span>
+                <ChevronDown className="custom-dropdown-chevron" size={16} />
+              </div>
+
+              {isSortDropdownOpen && (
+                <div className="custom-dropdown-menu" style={{ width: "100%" }}>
+                  <div
+                    className={`custom-dropdown-item ${sortOrder === "asc" ? "selected" : ""}`}
+                    onClick={() => {
+                      setSortOrder("asc");
+                      setSortDirection("asc");
+                      setIsSortDropdownOpen(false);
+                      const isAnimePahe =
+                        details?.provider?.toLowerCase() === "animepahe" ||
+                        details?.provider?.toLowerCase() === "pahe";
+                      if (isAnimePahe) {
+                        fetchItems(totalPages);
+                      }
+                    }}
+                  >
+                    Sort: ASC
+                  </div>
+                  <div
+                    className={`custom-dropdown-item ${sortOrder === "desc" ? "selected" : ""}`}
+                    onClick={() => {
+                      setSortOrder("desc");
+                      setSortDirection("desc");
+                      setIsSortDropdownOpen(false);
+                      const isAnimePahe =
+                        details?.provider?.toLowerCase() === "animepahe" ||
+                        details?.provider?.toLowerCase() === "pahe";
+                      if (isAnimePahe) {
+                        fetchItems(1);
+                      }
+                    }}
+                  >
+                    Sort: DESC
+                  </div>
+                  {hasDownloads && (
+                    <div
+                      className={`custom-dropdown-item ${sortOrder === "downloaded" ? "selected" : ""}`}
+                      onClick={() => {
+                        setSortOrder("downloaded");
+                        setIsSortDropdownOpen(false);
+                      }}
+                    >
+                      Sort: DOWNLOADED
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Action buttons if online provider is available */}
+            {details?.provider && details?.provider !== "local source" && (
+              <>
+                {type === "Anime" &&
+                  (episodesOrChapters.some(
+                    (ep) => ep.lang === "both" || ep.lang === "dub",
+                  ) ||
+                    (details?.DownloadedEpisodes?.dub &&
+                      details.DownloadedEpisodes.dub.length > 0)) && (
+                    <div
+                      className="input-group"
+                      style={{ minWidth: "80px", position: "relative" }}
+                      ref={dubDropdownRef}
+                    >
+                      <div
+                        className={`custom-dropdown-trigger ${isDubDropdownOpen ? "open" : ""}`}
+                        onClick={() => setIsDubDropdownOpen(!isDubDropdownOpen)}
+                        style={{ minHeight: "38px" }}
+                      >
+                        <span className="custom-dropdown-trigger-text">
+                          {dubSelect.toUpperCase()}
+                        </span>
+                        <ChevronDown
+                          className="custom-dropdown-chevron"
+                          size={16}
+                        />
+                      </div>
+
+                      {isDubDropdownOpen && (
+                        <div
+                          className="custom-dropdown-menu"
+                          style={{ width: "100%" }}
+                        >
+                          <div
+                            className={`custom-dropdown-item ${dubSelect === "sub" ? "selected" : ""}`}
+                            onClick={() => {
+                              setDubSelect("sub");
+                              setIsDubDropdownOpen(false);
+                            }}
+                          >
+                            SUB
+                          </div>
+                          <div
+                            className={`custom-dropdown-item ${dubSelect === "dub" ? "selected" : ""}`}
+                            onClick={() => {
+                              setDubSelect("dub");
+                              setIsDubDropdownOpen(false);
+                            }}
+                          >
+                            DUB
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                <button
+                  onClick={handleSelectAll}
+                  style={{
+                    opacity: selectableItems.length === 0 ? 0.5 : 1,
+                    cursor:
+                      selectableItems.length === 0 ? "not-allowed" : "pointer",
+                  }}
+                  className="btn-bulk"
+                  disabled={selectableItems.length === 0}
+                >
+                  {allSelectableSelected ? "Deselect All" : "Select All"}
+                </button>
+                {selectedItems.size > 0 && (
+                  <button
+                    onClick={() => setSelectedItems(new Set())}
+                    className="btn-bulk"
+                    style={{
+                      backgroundColor: "rgba(239, 68, 68, 0.15)",
+                      color: "var(--danger)",
+                      border: "1px solid rgba(239, 68, 68, 0.3)",
+                    }}
+                  >
+                    Clear Selected
+                  </button>
+                )}
+
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "6px",
+                    background: "rgba(255, 255, 255, 0.02)",
+                    padding: "4px 8px",
+                    borderRadius: "8px",
+                    border: isRangeInputInvalid
+                      ? "1.5px solid var(--danger)"
+                      : "1px solid var(--border)",
+                    boxShadow: isRangeInputInvalid
+                      ? "0 0 4px rgba(239, 68, 68, 0.25)"
+                      : "none",
+                    transition: "border-color 0.2s ease, box-shadow 0.2s ease",
+                  }}
+                >
+                  <input
+                    type="text"
+                    placeholder="Range 1-10 / 5"
+                    value={rangeInput}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setRangeInput(val);
+                      setIsRangeInputInvalid(!validateRangeInput(val));
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        handleSelectRange(rangeInput, true);
+                      }
+                    }}
+                    className="input-val"
+                    style={{
+                      width: "140px",
+                      padding: "6px 10px",
+                      fontSize: "13px",
+                      border: "none",
+                      background: "transparent",
+                      outline: "none",
+                    }}
+                  />
+                  <button
+                    onClick={() => handleSelectRange(rangeInput, true)}
+                    className="btn-bulk"
+                    style={{
+                      padding: "4px 10px",
+                      fontSize: "12px",
+                      border: "none",
+                      backgroundColor: "rgba(124, 58, 237, 0.15)",
+                      color: "var(--accent-hover)",
+                    }}
+                    title="Select range of episodes"
+                  >
+                    Select
+                  </button>
+                </div>
+                {numToDownload > 0 && (
+                  <button
+                    onClick={() => handleDownload()}
+                    className="btn-download-all"
+                  >
+                    <Download size={16} />
+                    <span>Download Checked ({numToDownload})</span>
+                  </button>
+                )}
+                {numToDelete > 0 && (
+                  <button
+                    onClick={handleBulkDelete}
+                    className="btn-delete-show"
+                  >
+                    <Trash2 size={16} />
+                    <span>Delete Checked ({numToDelete})</span>
+                  </button>
+                )}
+              </>
+            )}
+          </div>
+        )}
 
         <div className="items-list">
           {filteredItems.map((item) => {
@@ -1917,10 +2332,12 @@ export default function InfoView({
             const showOnlineActions =
               details?.provider && details?.provider !== "local source";
 
+            const isSelected = selectedItems.has(Number(item.number));
             return (
               <div
                 key={item.id}
-                className={`item-card glass-panel ${customBorderClass}`}
+                className={`item-card glass-panel ${customBorderClass} ${isSelected ? "selected" : ""}`}
+                onClick={(e) => handleItemClick(e, item)}
               >
                 <div
                   style={{
@@ -1933,9 +2350,9 @@ export default function InfoView({
                   {showOnlineActions && (
                     <input
                       type="checkbox"
-                      checked={selectedItems.has(item.id)}
+                      checked={isSelected}
                       disabled={isItemUnavailable(item)}
-                      onChange={() => handleSelectToggle(item.id)}
+                      readOnly
                       style={{
                         cursor: isItemUnavailable(item)
                           ? "not-allowed"
@@ -2156,6 +2573,7 @@ export default function InfoView({
         </div>
 
         {(() => {
+          if (sortOrder === "downloaded") return null;
           const isAnimePahe =
             details?.provider?.toLowerCase() === "animepahe" ||
             details?.provider?.toLowerCase() === "pahe";

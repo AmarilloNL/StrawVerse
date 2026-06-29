@@ -26,7 +26,9 @@ function stripElectronBrands(value = "") {
 }
 
 function normalizeHostname(value) {
-  return String(value || "").replace(/^\./, "").replace(/^www\./, "");
+  return String(value || "")
+    .replace(/^\./, "")
+    .replace(/^www\./, "");
 }
 
 function normalizeOrigin(value) {
@@ -40,13 +42,17 @@ function normalizeOrigin(value) {
 
 function getHeaderCaseInsensitive(headers, name) {
   const wanted = name.toLowerCase();
-  const key = Object.keys(headers || {}).find((k) => k.toLowerCase() === wanted);
+  const key = Object.keys(headers || {}).find(
+    (k) => k.toLowerCase() === wanted,
+  );
   return key ? headers[key] : null;
 }
 
 function takeHeaderCaseInsensitive(headers, name) {
   const wanted = name.toLowerCase();
-  const key = Object.keys(headers || {}).find((k) => k.toLowerCase() === wanted);
+  const key = Object.keys(headers || {}).find(
+    (k) => k.toLowerCase() === wanted,
+  );
   if (!key) return null;
   const value = headers[key];
   delete headers[key];
@@ -122,7 +128,9 @@ function saveClearanceCookie(cookie) {
 }
 
 async function saveClearanceCookiesForDomain(domain) {
-  const cookies = await global.ScrapperWindow.webContents.session.cookies.get({});
+  const cookies = await global.ScrapperWindow.webContents.session.cookies.get(
+    {},
+  );
   for (const cookie of cookies) {
     if (
       cookie.name === "cf_clearance" &&
@@ -305,11 +313,13 @@ function createScrapperWindow() {
 
   global.ScrapperWindow.webContents.on(
     "did-fail-load",
-    (event, errorCode, errorDescription, validatedURL) => {
-      console.error(
-        `Failed to load ${validatedURL}: ${errorCode} - ${errorDescription}`,
-      );
-      global.LastScrapperResponseCode = 599;
+    (event, errorCode, errorDescription, validatedURL, isMainFrame) => {
+      if (isMainFrame && errorCode !== -3) {
+        console.error(
+          `Failed to load main frame ${validatedURL}: ${errorCode} - ${errorDescription}`,
+        );
+        global.LastScrapperResponseCode = 599;
+      }
     },
   );
 
@@ -495,7 +505,8 @@ async function ExitScrapperWindow() {
   }
 }
 
-global.axios = axios.create();
+axios.defaults.proxy = false;
+global.axios = axios.create({ proxy: false });
 global.axios.interceptors.request.use(
   async (config) => {
     const headers = getHeaders(config.url);
@@ -526,14 +537,16 @@ global.axios.interceptors.response.use(
           response.config.headers.get("referer")) ||
         "";
 
-      return global.cloudflarebypass(response.config.url, true, referer).then(() => {
-        const newHeaders = getHeaders(response.config.url);
-        response.config.headers = {
-          ...response.config.headers,
-          ...newHeaders,
-        };
-        return global.axios(response.config);
-      });
+      return global
+        .cloudflarebypass(response.config.url, true, referer)
+        .then(() => {
+          const newHeaders = getHeaders(response.config.url);
+          response.config.headers = {
+            ...response.config.headers,
+            ...newHeaders,
+          };
+          return global.axios(response.config);
+        });
     }
 
     return response;
