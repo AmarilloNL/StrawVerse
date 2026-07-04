@@ -24,6 +24,7 @@ type Client struct {
 	Conn     *websocket.Conn
 	Send     chan []byte
 	IsHost   bool
+	IsCoHost bool
 	msgCounter  int
 	lastReset   time.Time
 }
@@ -146,7 +147,7 @@ func (c *Client) handleMessage(data []byte) {
 		}
 		c.Room = room
 
-	case protocol.OpPlayPause, protocol.OpTimeSync, protocol.OpAddQueue:
+	case protocol.OpPlayPause, protocol.OpTimeSync, protocol.OpAddQueue, protocol.OpRemoveQueue:
 		if c.Room != nil {
 			c.Room.Broadcast(data, c)
 		}
@@ -164,6 +165,29 @@ func (c *Client) handleMessage(data []byte) {
 	case protocol.OpChatMsg:
 		if c.Room != nil {
 			c.Room.BroadcastChat(data, c)
+		}
+
+	case protocol.OpUserEvent:
+		if c.Room != nil && c.IsHost {
+			eType, uID, val, err := protocol.DecodeUserEvent(data)
+			if err == nil && eType == 0x03 { 
+				c.Room.mu.Lock()
+				var targetClient *Client
+				for client, id := range c.Room.Clients {
+					if id == uID {
+						targetClient = client
+						break
+					}
+				}
+				if targetClient != nil {
+					isCoHost := len(val) == 1 && val[0] == '1'
+					targetClient.IsCoHost = isCoHost
+					c.Room.mu.Unlock()
+					c.Room.Broadcast(data, nil)
+				} else {
+					c.Room.mu.Unlock()
+				}
+			}
 		}
 
 	case protocol.OpPing:

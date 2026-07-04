@@ -408,6 +408,15 @@ const createWindow = () => {
     }
   });
 
+  ipcMain.handle("disable-whats-new", async () => {
+    try {
+      disableWhatsNew();
+      logger.info("IPC: disabled whats new pop up successfully");
+    } catch (err) {
+      logger.error("Failed to disable whats new: " + err.message);
+    }
+  });
+
   ipcMain.on("marketplace", (event, AnimeManga) => {
     if (global.marketplaceWin && !global.marketplaceWin.isDestroyed()) {
       global.marketplaceWin.focus();

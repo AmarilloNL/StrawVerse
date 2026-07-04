@@ -3095,6 +3095,7 @@ router.get("/api/history/list", async (req, res) => {
         w.is_completed,
         w.last_watched AS date,
         a.image_url,
+        a.provider,
         CASE WHEN a.id IS NOT NULL THEN 1 ELSE 0 END AS exists_in_catalog,
         mal.totalEpisodes AS total_count
       FROM WatchHistory w
@@ -3126,6 +3127,7 @@ router.get("/api/history/list", async (req, res) => {
         r.is_completed,
         r.last_read AS date,
         m.image_url,
+        m.provider,
         CASE WHEN m.id IS NOT NULL THEN 1 ELSE 0 END AS exists_in_catalog,
         mml.totalChapters AS total_count
       FROM ReadHistory r

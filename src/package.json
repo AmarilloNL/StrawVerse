@@ -6,7 +6,7 @@
   "scripts": {
     "start": "electron . --trace-warnings",
     "build": "npm run build --prefix gui",
-    "package": "electron-builder --win --linux",
+    "package": "node -e \"require('fs-extra').emptyDirSync('dist')\" && electron-builder --win --linux",
     "start:prod": "cross-env NODE_ENV=production electron .",
     "postinstall": "electron-builder install-app-deps"
   },
@@ -54,7 +54,9 @@
     "linux": {
       "target": [
         "AppImage",
-        "snap"
+        "snap",
+        "zip",
+        "deb"
       ],
       "icon": "assets/luffy.png",
       "desktop": {

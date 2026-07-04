@@ -699,8 +699,6 @@ export default function SettingsView({
                 </select>
               </div>
 
-
-
               <h3 className="settings-panel-subtitle">
                 Subtitles Configuration
               </h3>
@@ -1043,7 +1041,7 @@ export default function SettingsView({
                                 onSelectMedia(
                                   item.media_id,
                                   item.type,
-                                  "local",
+                                  item.provider || "local",
                                   "Back to Settings",
                                 );
                               }

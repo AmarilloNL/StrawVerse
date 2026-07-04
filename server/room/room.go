@@ -53,6 +53,20 @@ func (r *Room) Register(client *Client) {
 
 	client.Send <- protocol.EncodeRoomJoined(isHost, userID, code, hostProvider)
 
+	r.mu.RLock()
+	for c, id := range r.Clients {
+		if c != client {
+			client.Send <- protocol.EncodeUserEvent(protocol.UserEventJoined, id, c.Username)
+			if c.IsHost {
+				client.Send <- protocol.EncodeUserEvent(0x02, id, "")
+			}
+			if c.IsCoHost {
+				client.Send <- protocol.EncodeUserEvent(0x03, id, "1")
+			}
+		}
+	}
+	r.mu.RUnlock()
+
 	eventBuf := protocol.EncodeUserEvent(protocol.UserEventJoined, userID, client.Username)
 	r.Broadcast(eventBuf, client)
 
@@ -72,18 +86,25 @@ func (r *Room) Unregister(client *Client) {
 	delete(r.Clients, client)
 	delete(r.readyClients, userID)
 
+	var newHost *Client
 	if r.Host == client {
 		r.Host = nil
 		for c := range r.Clients {
 			r.Host = c
 			c.IsHost = true
 			c.Send <- protocol.EncodeRoomJoined(true, c.ID, r.Code, c.Provider)
+			newHost = c
 			break
 		}
 	}
 
 	empty := len(r.Clients) == 0
 	r.mu.Unlock()
+
+	if newHost != nil {
+		hostEvent := protocol.EncodeUserEvent(0x02, newHost.ID, "")
+		r.Broadcast(hostEvent, nil)
+	}
 
 	if !empty {
 		eventBuf := protocol.EncodeUserEvent(protocol.UserEventLeft, userID, client.Username)

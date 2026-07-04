@@ -20,6 +20,7 @@ const (
 	OpPing          byte = 0x0B
 	OpPong          byte = 0x0C
 	OpError         byte = 0x0D
+	OpRemoveQueue   byte = 0x0E
 )
 
 const (

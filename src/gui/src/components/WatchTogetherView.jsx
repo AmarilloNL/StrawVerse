@@ -32,9 +32,10 @@ export default function WatchTogetherView({ onNavigate }) {
   const [copied, setCopied] = useState(false);
   const [activeTab, setActiveTab] = useState("chat");
   const [chatMessage, setChatMessage] = useState("");
-  const [chatList, setChatList] = useState([]);
+  const [chatList, setChatList] = useState(watchTogetherClient.messages || []);
   const [joinInput, setJoinInput] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
+  const [rangeValue, setRangeValue] = useState("");
 
   const [providers, setProviders] = useState([]);
   const [selectedProvider, setSelectedProvider] = useState("");
@@ -127,7 +128,7 @@ export default function WatchTogetherView({ onNavigate }) {
     };
 
     const handleChat = (msg) => {
-      setChatList((prev) => [...prev, msg]);
+      setChatList([...watchTogetherClient.messages]);
     };
 
     const handleQueue = (q) => {
@@ -136,24 +137,63 @@ export default function WatchTogetherView({ onNavigate }) {
 
     const handleLoadMedia = ({ providerID, animeID, episode }) => {
       console.log("[Remote LoadMedia]", providerID, animeID, episode);
+      if (episode === 0) {
+        setActiveMedia(null);
+        return;
+      }
       const epIdentifier = String(episode);
+
+      let matchedQueueTitle = "";
+      if (watchTogetherClient.queue && watchTogetherClient.queue.length > 0) {
+        const qItem = watchTogetherClient.queue.find(
+          (item) => Number(item.episode) === Number(episode),
+        );
+        if (qItem && qItem.title) {
+          const parts = qItem.title.split(" - Ep ");
+          if (parts.length > 0) {
+            matchedQueueTitle = parts[0];
+          }
+        }
+      }
+
+      const isMatch =
+        selectedAnime &&
+        (!matchedQueueTitle ||
+          selectedAnime.title
+            .toLowerCase()
+            .includes(matchedQueueTitle.toLowerCase()) ||
+          matchedQueueTitle
+            .toLowerCase()
+            .includes(selectedAnime.title.toLowerCase()));
+
+      const finalId = isMatch ? selectedAnime.id : String(animeID);
+      const finalTitle = isMatch
+        ? selectedAnime.title
+        : matchedQueueTitle || "Watch Together Session";
+      const finalImage = isMatch ? selectedAnime.image : "";
+      const finalEpisodesList =
+        isMatch && animeEpisodes.length > 0
+          ? animeEpisodes
+          : [{ id: epIdentifier, number: episode }];
+
       setActiveMedia((prev) => {
         if (!prev) {
           return {
-            id: selectedAnime?.id || String(animeID),
+            id: finalId,
             ep: epIdentifier,
-            animeTitle: selectedAnime?.title || "Watch Together Session",
+            animeTitle: finalTitle,
             provider: selectedProvider || "anikoto",
-            image: selectedAnime?.image || "",
-            episodesList:
-              animeEpisodes.length > 0
-                ? animeEpisodes
-                : [{ id: epIdentifier, number: episode }],
+            image: finalImage,
+            episodesList: finalEpisodesList,
           };
         }
         return {
           ...prev,
+          id: finalId,
           ep: epIdentifier,
+          animeTitle: finalTitle,
+          image: finalImage,
+          episodesList: finalEpisodesList,
         };
       });
     };
@@ -167,6 +207,16 @@ export default function WatchTogetherView({ onNavigate }) {
       setIsHost(false);
       setUsers([]);
       setHostProvider("");
+      setActiveMedia(null);
+      setQueue([]);
+      setChatList([]);
+      setSearchQuery("");
+      setSearchResults([]);
+      setEpisodeSearchQuery("");
+      setSelectedAnime(null);
+      setSelectedAnimeDetails(null);
+      setAnimeEpisodes([]);
+      setRangeValue("");
     };
 
     watchTogetherClient.on("roomJoined", handleRoomJoined);
@@ -265,12 +315,12 @@ export default function WatchTogetherView({ onNavigate }) {
         ? epItem.number
         : parseFloat(epItem.number) || 1;
     const mediaObj = {
-      id: selectedAnime.id,
+      id: selectedAnime?.id || "100",
       ep: epItem.id || epItem.number || 1,
-      animeTitle: selectedAnime.title,
-      provider: selectedProvider,
-      image: selectedAnime.image,
-      episodesList: animeEpisodes,
+      animeTitle: selectedAnime?.title || "Watch Together Session",
+      provider: selectedProvider || "anikoto",
+      image: selectedAnime?.image || "",
+      episodesList: animeEpisodes.length > 0 ? animeEpisodes : [epItem],
     };
     setActiveMedia(mediaObj);
     if (roomCode) {
@@ -279,14 +329,23 @@ export default function WatchTogetherView({ onNavigate }) {
   };
 
   const handlePlayFromQueue = (queueItem) => {
-    const match = animeEpisodes.find(
-      (ep) => Number(ep.number) === Number(queueItem.episode),
-    );
+    const epNum = Number(queueItem.episode) || 1;
+    const match = animeEpisodes.find((ep) => Number(ep.number) === epNum);
     if (match) {
       handlePlayEpisode(match);
     } else {
-      const epNum = Number(queueItem.episode);
-      handlePlayEpisode({ id: String(epNum), number: epNum });
+      let parsedTitle = "Watch Together Session";
+      if (queueItem.title) {
+        const parts = queueItem.title.split(" - Ep ");
+        if (parts.length > 0) {
+          parsedTitle = parts[0];
+        }
+      }
+      handlePlayEpisode({
+        id: String(epNum),
+        number: epNum,
+        title: queueItem.title || `${parsedTitle} - Ep ${epNum}`,
+      });
     }
   };
 
@@ -294,20 +353,11 @@ export default function WatchTogetherView({ onNavigate }) {
     if (queue.length > 0) {
       const nextItem = queue[0];
       handlePlayFromQueue(nextItem);
-    } else if (activeMedia) {
-      const sorted = [...animeEpisodes].sort(
-        (a, b) => Number(a.number) - Number(b.number),
-      );
-      const currentEpObj = sorted.find(
-        (ep) =>
-          String(ep.id) === String(activeMedia.ep) ||
-          Number(ep.number) === Number(activeMedia.ep),
-      );
-      if (currentEpObj) {
-        const currentIdx = sorted.indexOf(currentEpObj);
-        if (currentIdx !== -1 && currentIdx < sorted.length - 1) {
-          handlePlayEpisode(sorted[currentIdx + 1]);
-        }
+      watchTogetherClient.sendRemoveQueue(0);
+    } else {
+      setActiveMedia(null);
+      if (roomCode) {
+        watchTogetherClient.sendLoadMedia(0, 0, 0);
       }
     }
   };
@@ -319,6 +369,75 @@ export default function WatchTogetherView({ onNavigate }) {
         : parseFloat(epItem.number) || 1;
     const title = `${selectedAnime?.title || "Anime"} - Ep ${epNum}`;
     watchTogetherClient.sendAddQueue(1, 100, epNum, title);
+  };
+
+  const handleQueueRange = (limit) => {
+    if (!filteredEpisodes || filteredEpisodes.length === 0) return;
+    const sorted = [...filteredEpisodes].sort((a, b) => {
+      const aNum =
+        typeof a.number === "number" ? a.number : parseFloat(a.number) || 0;
+      const bNum =
+        typeof b.number === "number" ? b.number : parseFloat(b.number) || 0;
+      return aNum - bNum;
+    });
+
+    if (limit === "all") {
+      for (const epItem of sorted) {
+        const epNum =
+          typeof epItem.number === "number"
+            ? epItem.number
+            : parseFloat(epItem.number) || 1;
+        const title = `${selectedAnime?.title || "Anime"} - Ep ${epNum}`;
+        watchTogetherClient.sendAddQueue(1, 100, epNum, title);
+      }
+      return;
+    }
+
+    const cleaned = String(limit).trim().toLowerCase();
+    let start = 1;
+    let end = 1;
+
+    const rangeMatch = cleaned.match(/^(\d+)\s*(?:-|to)\s*(\d+)$/);
+    if (rangeMatch) {
+      start = parseInt(rangeMatch[1]);
+      end = parseInt(rangeMatch[2]);
+    } else {
+      const singleMatch = cleaned.match(/^(\d+)$/);
+      if (singleMatch) {
+        start = 1;
+        end = parseInt(singleMatch[1]);
+      } else {
+        alert(
+          "Invalid range format. Please use e.g. '1-50', '1 to 50', or '50'.",
+        );
+        return;
+      }
+    }
+
+    const minVal = Math.min(start, end);
+    const maxVal = Math.max(start, end);
+
+    const toQueue = sorted.filter((ep) => {
+      const num =
+        typeof ep.number === "number" ? ep.number : parseFloat(ep.number);
+      return !isNaN(num) && num >= minVal && num <= maxVal;
+    });
+
+    for (const epItem of toQueue) {
+      const epNum =
+        typeof epItem.number === "number"
+          ? epItem.number
+          : parseFloat(epItem.number) || 1;
+      const title = `${selectedAnime?.title || "Anime"} - Ep ${epNum}`;
+      watchTogetherClient.sendAddQueue(1, 100, epNum, title);
+    }
+  };
+
+  const handleClearQueue = () => {
+    const len = queue.length;
+    for (let i = 0; i < len; i++) {
+      watchTogetherClient.sendRemoveQueue(0);
+    }
   };
 
   const handleCreateRoom = async () => {
@@ -359,11 +478,62 @@ export default function WatchTogetherView({ onNavigate }) {
     setChatMessage("");
   };
 
+  useEffect(() => {
+    if (hostProvider && providers.length > 0) {
+      const matchedProvider = providers.find(
+        (p) => p.toLowerCase() === hostProvider.toLowerCase(),
+      );
+      if (matchedProvider) {
+        setSelectedProvider(matchedProvider);
+      }
+    }
+  }, [hostProvider, providers]);
+
   const isExtensionMismatch =
     !isHost &&
     hostProvider &&
     selectedProvider &&
     hostProvider.toLowerCase() !== selectedProvider.toLowerCase();
+
+  const isLocalCoHost = users.some(
+    (u) => u.id === watchTogetherClient.userID && u.isCoHost,
+  );
+  const hasPrivileges = isHost || isLocalCoHost;
+
+  useEffect(() => {
+    if (hasPrivileges && !activeMedia && queue.length > 0) {
+      const nextItem = queue[0];
+      handlePlayFromQueue(nextItem);
+      watchTogetherClient.sendRemoveQueue(0);
+    }
+  }, [queue, activeMedia, hasPrivileges]);
+
+  useEffect(() => {
+    if (selectedAnime && selectedAnimeDetails && selectedProvider) {
+      if (
+        selectedAnimeDetails.provider !== selectedProvider &&
+        !selectedAnimeDetails.error
+      ) {
+        const linked = selectedAnimeDetails.linkedProviders?.find(
+          (p) => p.provider === selectedProvider,
+        );
+        if (linked) {
+          handleSelectAnime({
+            id: linked.id,
+            title: selectedAnime.title,
+            image: selectedAnime.image,
+          });
+        } else {
+          setAnimeEpisodes([]);
+          setSelectedAnimeDetails({
+            provider: selectedAnimeDetails.provider,
+            error: "Not Found",
+            message: `This anime is not mapped or linked to the selected provider "${selectedProvider}".`,
+          });
+        }
+      }
+    }
+  }, [selectedProvider]);
 
   if (malLoggedIn === null) {
     return (
@@ -503,7 +673,7 @@ export default function WatchTogetherView({ onNavigate }) {
               image={activeMedia.image}
               onBack={() => setActiveMedia(null)}
               hideExit={true}
-              isHost={isHost}
+              isHost={hasPrivileges}
               onSkip={handleSkipEpisode}
             />
           ) : (
@@ -573,178 +743,274 @@ export default function WatchTogetherView({ onNavigate }) {
                 <ArrowLeft size={14} /> Back to Search Results
               </button>
 
-              <div className="wt-info-hero">
-                <img
-                  src={selectedAnimeDetails?.image || selectedAnime.image}
-                  alt={selectedAnime.title}
-                  className="wt-info-poster"
-                />
-                <div className="wt-info-meta">
-                  <h3>{selectedAnimeDetails?.title || selectedAnime.title}</h3>
-                  <div className="wt-info-tags">
-                    <span className="wt-info-tag">{selectedProvider}</span>
-                    {selectedAnimeDetails?.status && (
-                      <span className="wt-info-tag">
-                        {selectedAnimeDetails.status}
-                      </span>
-                    )}
-                    {animeEpisodes.length > 0 && (
-                      <span className="wt-info-tag">
-                        {animeEpisodes.length} Episodes
-                      </span>
-                    )}
-                  </div>
-                  {selectedAnimeDetails?.description && (
-                    <p className="wt-info-desc">
-                      {selectedAnimeDetails.description}
-                    </p>
-                  )}
+              {selectedAnimeDetails?.error === "Not Found" ? (
+                <div
+                  style={{
+                    padding: "40px 24px",
+                    background: "rgba(31, 41, 55, 0.4)",
+                    border: "1px solid rgba(239, 68, 68, 0.2)",
+                    borderRadius: "8px",
+                    textAlign: "center",
+                    color: "#9ca3af",
+                    margin: "40px auto",
+                    maxWidth: "400px",
+                  }}
+                >
+                  <AlertTriangle
+                    size={48}
+                    color="#f87171"
+                    style={{ marginBottom: "16px" }}
+                  />
+                  <h3
+                    style={{
+                      color: "#fff",
+                      marginBottom: "8px",
+                      fontSize: "1.1rem",
+                    }}
+                  >
+                    Anime Not Linked
+                  </h3>
+                  <p
+                    style={{
+                      fontSize: "0.85rem",
+                      margin: "0 0 20px 0",
+                      lineHeight: "1.4",
+                    }}
+                  >
+                    This anime is not mapped or linked to the selected provider{" "}
+                    <strong>{selectedProvider}</strong> in the mapping database.
+                  </p>
+                  <button
+                    className="wt-btn-primary"
+                    style={{ width: "auto" }}
+                    onClick={() => {
+                      if (selectedAnimeDetails?.provider) {
+                        setSelectedProvider(selectedAnimeDetails.provider);
+                      } else {
+                        setSelectedAnime(null);
+                        setSelectedAnimeDetails(null);
+                      }
+                    }}
+                  >
+                    Go Back / Switch Provider
+                  </button>
                 </div>
-              </div>
-
-              {/* Episodes List Toolbar */}
-              <div className="wt-episodes-section">
-                <div className="wt-ep-toolbar">
-                  <h4 style={{ margin: 0, color: "#fff", fontSize: "0.92rem" }}>
-                    Episodes ({filteredEpisodes.length})
-                  </h4>
-
-                  <div className="wt-ep-toolbar-controls">
-                    {/* Episode Filter Box */}
-                    <div className="wt-ep-search-wrapper">
-                      <Search size={12} className="wt-ep-search-icon" />
-                      <input
-                        type="text"
-                        className="wt-ep-search-input"
-                        placeholder="Filter episode..."
-                        value={episodeSearchQuery}
-                        onChange={(e) => setEpisodeSearchQuery(e.target.value)}
-                      />
-                      {episodeSearchQuery && (
-                        <button
-                          className="wt-ep-search-clear"
-                          onClick={() => setEpisodeSearchQuery("")}
-                        >
-                          <X size={12} />
-                        </button>
+              ) : (
+                <>
+                  <div className="wt-info-hero">
+                    <img
+                      src={selectedAnimeDetails?.image || selectedAnime.image}
+                      alt={selectedAnime.title}
+                      className="wt-info-poster"
+                    />
+                    <div className="wt-info-meta">
+                      <h3>
+                        {selectedAnimeDetails?.title || selectedAnime.title}
+                      </h3>
+                      <div className="wt-info-tags">
+                        <span className="wt-info-tag">{selectedProvider}</span>
+                        {selectedAnimeDetails?.status && (
+                          <span className="wt-info-tag">
+                            {selectedAnimeDetails.status}
+                          </span>
+                        )}
+                        {animeEpisodes.length > 0 && (
+                          <span className="wt-info-tag">
+                            {animeEpisodes.length} Episodes
+                          </span>
+                        )}
+                      </div>
+                      {selectedAnimeDetails?.description && (
+                        <p className="wt-info-desc">
+                          {selectedAnimeDetails.description}
+                        </p>
                       )}
                     </div>
+                  </div>
 
-                    {/* Sub / Dub Selector */}
-                    <select
-                      className="wt-ep-select-sm"
-                      value={dubSelect}
-                      onChange={(e) => setDubSelect(e.target.value)}
-                    >
-                      <option value="sub">SUB</option>
-                      <option value="dub">DUB</option>
-                    </select>
-
-                    {/* Server / Provider Switcher */}
-                    {selectedAnimeDetails?.linkedProviders?.length > 1 && (
-                      <select
-                        className="wt-ep-select-sm"
-                        value={selectedProvider}
-                        onChange={(e) => {
-                          const newProv = e.target.value;
-                          setSelectedProvider(newProv);
-                          const linked =
-                            selectedAnimeDetails.linkedProviders.find(
-                              (p) => p.provider === newProv,
-                            );
-                          if (linked) {
-                            handleSelectAnime({
-                              id: linked.id,
-                              title: selectedAnime.title,
-                            });
-                          }
+                  {/* Episodes List Toolbar */}
+                  <div className="wt-episodes-section">
+                    <div className="wt-ep-toolbar">
+                      <h4
+                        style={{
+                          margin: 0,
+                          color: "#fff",
+                          fontSize: "0.92rem",
                         }}
                       >
-                        {selectedAnimeDetails.linkedProviders.map((lp, idx) => (
-                          <option key={idx} value={lp.provider}>
-                            Server: {lp.provider}
-                          </option>
-                        ))}
-                      </select>
-                    )}
+                        Episodes ({filteredEpisodes.length})
+                      </h4>
 
-                    {/* Sort Order Toggle */}
-                    <button
-                      className="wt-btn-sort-sm"
-                      onClick={() =>
-                        setSortOrder(sortOrder === "asc" ? "desc" : "asc")
-                      }
-                      title="Toggle Sort Order"
-                    >
-                      <ArrowUpDown size={12} /> {sortOrder.toUpperCase()}
-                    </button>
-                  </div>
-                </div>
-
-                {loadingEpisodes ? (
-                  <div
-                    style={{
-                      color: "#9ca3af",
-                      fontSize: "0.85rem",
-                      padding: "12px 0",
-                    }}
-                  >
-                    Loading episodes...
-                  </div>
-                ) : filteredEpisodes.length === 0 ? (
-                  <div
-                    style={{
-                      color: "#9ca3af",
-                      fontSize: "0.85rem",
-                      padding: "12px 0",
-                    }}
-                  >
-                    No episodes match your filter.
-                  </div>
-                ) : (
-                  <div className="wt-episodes-grid">
-                    {filteredEpisodes.map((ep, idx) => (
-                      <div key={idx} className="wt-ep-card">
-                        <div className="wt-ep-header">
-                          <span className="wt-ep-number">
-                            Episode {ep.number || ep.id || idx + 1}
-                          </span>
-                          <span className="wt-ep-badge">
-                            {dubSelect.toUpperCase()}
-                          </span>
-                        </div>
-                        {ep.title &&
-                          ep.title.toLowerCase() !==
-                            `episode ${ep.number || idx + 1}`.toLowerCase() &&
-                          ep.title.toLowerCase() !==
-                            `ep ${ep.number || idx + 1}`.toLowerCase() &&
-                          ep.title.toLowerCase() !==
-                            `${ep.number || idx + 1}`.toLowerCase() && (
-                            <div className="wt-ep-title" title={ep.title}>
-                              {ep.title}
-                            </div>
+                      <div className="wt-ep-toolbar-controls">
+                        {/* Episode Filter Box */}
+                        <div className="wt-ep-search-wrapper">
+                          <Search size={12} className="wt-ep-search-icon" />
+                          <input
+                            type="text"
+                            className="wt-ep-search-input"
+                            placeholder="Filter episode..."
+                            value={episodeSearchQuery}
+                            onChange={(e) =>
+                              setEpisodeSearchQuery(e.target.value)
+                            }
+                          />
+                          {episodeSearchQuery && (
+                            <button
+                              className="wt-ep-search-clear"
+                              onClick={() => setEpisodeSearchQuery("")}
+                            >
+                              <X size={12} />
+                            </button>
                           )}
-                        <div className="wt-ep-actions">
-                          <button
-                            className="wt-btn-play-sm"
-                            onClick={() => handlePlayEpisode(ep)}
-                            title="Play episode together"
-                          >
-                            <Play size={11} /> Play
-                          </button>
-                          <button
-                            className="wt-btn-queue-sm"
-                            onClick={() => handleAddToQueue(ep)}
-                            title="Add to watch queue"
-                          >
-                            <Plus size={11} /> Queue
-                          </button>
                         </div>
+
+                        {/* Sub / Dub Selector */}
+                        <select
+                          className="wt-ep-select-sm"
+                          value={dubSelect}
+                          onChange={(e) => setDubSelect(e.target.value)}
+                        >
+                          <option value="sub">SUB</option>
+                          <option value="dub">DUB</option>
+                        </select>
+
+                        {/* Sort Order Toggle */}
+                        <button
+                          className="wt-btn-sort-sm"
+                          onClick={() =>
+                            setSortOrder(sortOrder === "asc" ? "desc" : "asc")
+                          }
+                          title="Toggle Sort Order"
+                        >
+                          <ArrowUpDown size={12} /> {sortOrder.toUpperCase()}
+                        </button>
+
+                        {hasPrivileges && filteredEpisodes.length > 0 && (
+                          <div
+                            style={{
+                              display: "inline-flex",
+                              gap: "6px",
+                              alignItems: "center",
+                            }}
+                          >
+                            <input
+                              type="text"
+                              className="wt-ep-search-input"
+                              placeholder="e.g. 1-50 or 50"
+                              value={rangeValue}
+                              onChange={(e) => setRangeValue(e.target.value)}
+                              style={{
+                                width: "100px",
+                                height: "28px",
+                                fontSize: "0.72rem",
+                                padding: "0 8px",
+                                background: "rgba(31, 41, 55, 0.5)",
+                                border: "1px solid rgba(156, 163, 175, 0.3)",
+                                color: "#fff",
+                                borderRadius: "4px",
+                              }}
+                            />
+                            <button
+                              className="wt-btn-sort-sm"
+                              onClick={() => handleQueueRange(rangeValue)}
+                              style={{
+                                background: "rgba(167, 139, 250, 0.2)",
+                                border: "1px solid rgba(167, 139, 250, 0.4)",
+                                color: "#c084fc",
+                                cursor: "pointer",
+                                padding: "4px 8px",
+                                height: "28px",
+                              }}
+                              title="Queue custom range"
+                            >
+                              Queue Range
+                            </button>
+                            <button
+                              className="wt-btn-sort-sm"
+                              onClick={() => handleQueueRange("all")}
+                              style={{
+                                background: "rgba(167, 139, 250, 0.2)",
+                                border: "1px solid rgba(167, 139, 250, 0.4)",
+                                color: "#c084fc",
+                                cursor: "pointer",
+                                padding: "4px 8px",
+                                height: "28px",
+                              }}
+                              title="Queue all episodes"
+                            >
+                              Queue All
+                            </button>
+                          </div>
+                        )}
                       </div>
-                    ))}
+                    </div>
+
+                    {loadingEpisodes ? (
+                      <div
+                        style={{
+                          color: "#9ca3af",
+                          fontSize: "0.85rem",
+                          padding: "12px 0",
+                        }}
+                      >
+                        Loading episodes...
+                      </div>
+                    ) : filteredEpisodes.length === 0 ? (
+                      <div
+                        style={{
+                          color: "#9ca3af",
+                          fontSize: "0.85rem",
+                          padding: "12px 0",
+                        }}
+                      >
+                        No episodes match your filter.
+                      </div>
+                    ) : (
+                      <div className="wt-episodes-grid">
+                        {filteredEpisodes.map((ep, idx) => (
+                          <div key={idx} className="wt-ep-card">
+                            <div className="wt-ep-header">
+                              <span className="wt-ep-number">
+                                Episode {ep.number || ep.id || idx + 1}
+                              </span>
+                              <span className="wt-ep-badge">
+                                {dubSelect.toUpperCase()}
+                              </span>
+                            </div>
+                            {ep.title &&
+                              ep.title.toLowerCase() !==
+                                `episode ${ep.number || idx + 1}`.toLowerCase() &&
+                              ep.title.toLowerCase() !==
+                                `ep ${ep.number || idx + 1}`.toLowerCase() &&
+                              ep.title.toLowerCase() !==
+                                `${ep.number || idx + 1}`.toLowerCase() && (
+                                <div className="wt-ep-title" title={ep.title}>
+                                  {ep.title}
+                                </div>
+                              )}
+                            <div className="wt-ep-actions">
+                              <button
+                                className="wt-btn-play-sm"
+                                onClick={() => handlePlayEpisode(ep)}
+                                title="Play episode together"
+                              >
+                                <Play size={11} /> Play
+                              </button>
+                              <button
+                                className="wt-btn-queue-sm"
+                                onClick={() => handleAddToQueue(ep)}
+                                title="Add to watch queue"
+                              >
+                                <Plus size={11} /> Queue
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
-                )}
-              </div>
+                </>
+              )}
             </div>
           ) : (
             /* Search Results Grid */
@@ -939,6 +1205,23 @@ export default function WatchTogetherView({ onNavigate }) {
                 }}
               >
                 <h4 style={{ margin: 0, color: "#fff" }}>Shared Watch Queue</h4>
+                {hasPrivileges && queue.length > 0 && (
+                  <button
+                    onClick={handleClearQueue}
+                    style={{
+                      padding: "4px 8px",
+                      fontSize: "0.72rem",
+                      background: "rgba(239, 68, 68, 0.2)",
+                      border: "1px solid rgba(239, 68, 68, 0.4)",
+                      color: "#f87171",
+                      borderRadius: "4px",
+                      cursor: "pointer",
+                      height: "auto",
+                    }}
+                  >
+                    Clear All
+                  </button>
+                )}
               </div>
               {queue.length === 0 ? (
                 <div style={{ color: "#6b7280", fontSize: "0.85rem" }}>
@@ -970,23 +1253,47 @@ export default function WatchTogetherView({ onNavigate }) {
                       {item.title ||
                         `Anime #${item.animeID} - Ep ${item.episode}`}
                     </span>
-                    {isHost && (
-                      <button
-                        className="wt-btn-play-sm"
-                        onClick={() => handlePlayFromQueue(item)}
-                        style={{
-                          padding: "4px 8px",
-                          fontSize: "0.72rem",
-                          height: "auto",
-                          display: "inline-flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          gap: "4px",
-                          borderRadius: "4px",
-                        }}
-                      >
-                        <Play size={10} /> Play
-                      </button>
+                    {hasPrivileges && (
+                      <div style={{ display: "inline-flex", gap: "6px" }}>
+                        <button
+                          className="wt-btn-play-sm"
+                          onClick={() => handlePlayFromQueue(item)}
+                          style={{
+                            padding: "4px 8px",
+                            fontSize: "0.72rem",
+                            height: "auto",
+                            display: "inline-flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            gap: "4px",
+                            borderRadius: "4px",
+                          }}
+                        >
+                          <Play size={10} /> Play
+                        </button>
+                        <button
+                          className="wt-btn-delete-sm"
+                          onClick={() =>
+                            watchTogetherClient.sendRemoveQueue(idx)
+                          }
+                          style={{
+                            padding: "4px 8px",
+                            fontSize: "0.72rem",
+                            height: "auto",
+                            display: "inline-flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            gap: "4px",
+                            borderRadius: "4px",
+                            background: "rgba(239, 68, 68, 0.2)",
+                            border: "1px solid rgba(239, 68, 68, 0.4)",
+                            color: "#f87171",
+                            cursor: "pointer",
+                          }}
+                        >
+                          Delete
+                        </button>
+                      </div>
                     )}
                   </div>
                 ))
@@ -1014,6 +1321,50 @@ export default function WatchTogetherView({ onNavigate }) {
                     </span>
                     {u.isHost && (
                       <span className="wt-user-badge-host">HOST</span>
+                    )}
+                    {u.isCoHost && (
+                      <span
+                        className="wt-user-badge-cohost"
+                        style={{
+                          marginLeft: 6,
+                          background: "rgba(59, 130, 246, 0.2)",
+                          border: "1px solid rgba(59, 130, 246, 0.4)",
+                          color: "#60a5fa",
+                          padding: "1px 4px",
+                          borderRadius: "4px",
+                          fontSize: "0.68rem",
+                          fontWeight: "700",
+                        }}
+                      >
+                        CO-HOST
+                      </span>
+                    )}
+                    {isHost && u.id !== watchTogetherClient.userID && (
+                      <button
+                        className="wt-btn-cohost-sm"
+                        onClick={() =>
+                          watchTogetherClient.sendCoHostChange(
+                            u.id,
+                            !u.isCoHost,
+                          )
+                        }
+                        style={{
+                          marginLeft: "auto",
+                          padding: "2px 6px",
+                          fontSize: "0.68rem",
+                          background: u.isCoHost
+                            ? "rgba(239, 68, 68, 0.2)"
+                            : "rgba(16, 185, 129, 0.2)",
+                          border: u.isCoHost
+                            ? "1px solid rgba(239, 68, 68, 0.4)"
+                            : "1px solid rgba(16, 185, 129, 0.4)",
+                          color: u.isCoHost ? "#f87171" : "#34d399",
+                          borderRadius: "4px",
+                          cursor: "pointer",
+                        }}
+                      >
+                        {u.isCoHost ? "Demote" : "Co-Host"}
+                      </button>
                     )}
                   </div>
                 ))}

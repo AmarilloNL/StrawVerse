@@ -279,6 +279,7 @@ export default function VideoPlayer({
   };
 
   const togglePlay = () => {
+    if (watchTogetherClient.roomCode && !isHost) return;
     const video = videoRef.current;
     if (!video) return;
     if (video.paused) {
@@ -320,6 +321,7 @@ export default function VideoPlayer({
   };
 
   const handleTimelineChange = (e) => {
+    if (watchTogetherClient.roomCode && !isHost) return;
     const val = parseFloat(e.target.value);
     currentTimeRef.current = val;
     setCurrentTime(val);
@@ -339,6 +341,21 @@ export default function VideoPlayer({
           rafRef.current = null;
           updateTimelineDOM();
         });
+      }
+    }
+  };
+
+  const handleEnded = () => {
+    saveWatchProgress(true);
+    if (watchTogetherClient.roomCode) {
+      if (isHost) {
+        if (onSkip) {
+          onSkip();
+        }
+      }
+    } else {
+      if (nextIndex !== -1) {
+        handleNextEpisode();
       }
     }
   };
@@ -1100,6 +1117,7 @@ export default function VideoPlayer({
         case " ":
         case "k":
           e.preventDefault();
+          if (watchTogetherClient.roomCode && !isHost) break;
           if (video.paused) {
             showIndicator(Play, "Play");
             video.play().catch(() => {});
@@ -1117,6 +1135,7 @@ export default function VideoPlayer({
         case "arrowleft":
         case "j":
           e.preventDefault();
+          if (watchTogetherClient.roomCode && !isHost) break;
           video.currentTime = Math.max(0, video.currentTime - 10);
           currentTimeRef.current = video.currentTime;
           showIndicator(ChevronLeft, "-10s");
@@ -1125,6 +1144,7 @@ export default function VideoPlayer({
         case "arrowright":
         case "l":
           e.preventDefault();
+          if (watchTogetherClient.roomCode && !isHost) break;
           video.currentTime = Math.min(
             video.duration || 0,
             video.currentTime + 10,
@@ -1239,20 +1259,6 @@ export default function VideoPlayer({
             )}
             <span>{isCurrentDownloaded ? "Local" : "Online"}</span>
           </span>
-          {isHost && onSkip && (
-            <button
-              onClick={onSkip}
-              className="player-back-btn"
-              style={{
-                marginLeft: "8px",
-                border: "1px solid rgba(139, 92, 246, 0.3)",
-                padding: "4px 8px",
-                height: "auto",
-              }}
-            >
-              <span>Skip Episode</span>
-            </button>
-          )}
         </div>
       </div>
 
@@ -1297,6 +1303,7 @@ export default function VideoPlayer({
               onDurationChange={handleDurationChange}
               onVolumeChange={handleVolumeChange}
               onProgress={handleProgress}
+              onEnded={handleEnded}
             >
               {processedSubtitles.map((sub, idx) => {
                 const sourceKey =
@@ -1338,6 +1345,7 @@ export default function VideoPlayer({
                   max={duration || 100}
                   defaultValue={0}
                   onChange={handleTimelineChange}
+                  disabled={watchTogetherClient.roomCode && !isHost}
                   className="player-timeline-slider"
                   style={{
                     "--progress-percent": `${(currentTime / (duration || 1)) * 100}%`,

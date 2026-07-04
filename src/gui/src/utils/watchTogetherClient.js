@@ -13,11 +13,14 @@ export const OPCODES = {
   PING: 0x0b,
   PONG: 0x0c,
   ERROR: 0x0d,
+  REMOVE_QUEUE: 0x0e,
 };
 
 export const USER_EVENTS = {
   JOINED: 0x00,
   LEFT: 0x01,
+  HOST_CHANGE: 0x02,
+  COHOST_CHANGE: 0x03,
 };
 
 class WatchTogetherClient {
@@ -32,8 +35,9 @@ class WatchTogetherClient {
     this.isHost = false;
     this.userID = null;
     this.username = "Guest";
-    this.users = []; // Array of { id, username }
-    this.queue = []; // Array of { providerID, animeID, episode, title }
+    this.users = [];
+    this.queue = [];
+    this.messages = [];
     this.listeners = new Map();
     this.pingInterval = null;
     this.pingLatency = 0;
@@ -155,6 +159,7 @@ class WatchTogetherClient {
     this.isHost = false;
     this.userID = null;
     this.users = [];
+    this.messages = [];
     if (this.pingInterval) {
       clearInterval(this.pingInterval);
       this.pingInterval = null;
@@ -259,6 +264,18 @@ class WatchTogetherClient {
     this.ws.send(buf);
   }
 
+  sendRemoveQueue(index) {
+    if (!this.isConnected || !this.roomCode) return;
+    this.queue.splice(index, 1);
+    this.emit("queueUpdated", this.queue);
+
+    const buf = new ArrayBuffer(2);
+    const view = new DataView(buf);
+    view.setUint8(0, OPCODES.REMOVE_QUEUE);
+    view.setUint8(1, index);
+    this.ws.send(buf);
+  }
+
   sendChatMessage(text) {
     if (!this.isConnected || !this.roomCode || !text.trim()) return;
     const enc = new TextEncoder();
@@ -277,6 +294,24 @@ class WatchTogetherClient {
     view.setUint16(2 + senderBytes.length, msgBytes.length, false);
     u8.set(msgBytes, 4 + senderBytes.length);
 
+    this.ws.send(buf);
+  }
+
+  sendCoHostChange(userID, isCoHost) {
+    if (!this.isConnected || !this.roomCode) return;
+    const val = isCoHost ? "1" : "";
+    const enc = new TextEncoder();
+    const valBytes = enc.encode(val);
+
+    const buf = new ArrayBuffer(1 + 1 + 1 + 1 + valBytes.length);
+    const view = new DataView(buf);
+    view.setUint8(0, OPCODES.USER_EVENT);
+    view.setUint8(1, USER_EVENTS.COHOST_CHANGE);
+    view.setUint8(2, userID);
+    view.setUint8(3, valBytes.length);
+
+    const u8 = new Uint8Array(buf);
+    u8.set(valBytes, 4);
     this.ws.send(buf);
   }
 
@@ -300,7 +335,12 @@ class WatchTogetherClient {
         }
         this.hostProvider = hostProvider;
         this.users = [
-          { id: this.userID, username: this.username, isHost: this.isHost },
+          {
+            id: this.userID,
+            username: this.username,
+            isHost: this.isHost,
+            isCoHost: false,
+          },
         ];
         this.emit("roomJoined", {
           roomCode: this.roomCode,
@@ -319,10 +359,49 @@ class WatchTogetherClient {
 
         if (eventType === USER_EVENTS.JOINED) {
           if (!this.users.some((u) => u.id === uID)) {
-            this.users.push({ id: uID, username, isHost: false });
+            this.users.push({
+              id: uID,
+              username,
+              isHost: false,
+              isCoHost: false,
+            });
           }
         } else if (eventType === USER_EVENTS.LEFT) {
           this.users = this.users.filter((u) => u.id !== uID);
+        } else if (eventType === USER_EVENTS.HOST_CHANGE) {
+          this.users = this.users.map((u) => {
+            if (u.id === uID) {
+              return { ...u, isHost: true, isCoHost: false };
+            }
+            return { ...u, isHost: false };
+          });
+          if (uID === this.userID) {
+            this.isHost = true;
+            this.emit("roomJoined", {
+              roomCode: this.roomCode,
+              isHost: this.isHost,
+              userID: this.userID,
+              hostProvider: this.hostProvider,
+            });
+          } else {
+            if (this.isHost) {
+              this.isHost = false;
+              this.emit("roomJoined", {
+                roomCode: this.roomCode,
+                isHost: this.isHost,
+                userID: this.userID,
+                hostProvider: this.hostProvider,
+              });
+            }
+          }
+        } else if (eventType === USER_EVENTS.COHOST_CHANGE) {
+          const isCo = username === "1";
+          this.users = this.users.map((u) => {
+            if (u.id === uID) {
+              return { ...u, isCoHost: isCo };
+            }
+            return u;
+          });
         }
         this.emit("usersChanged", this.users);
         break;
@@ -371,12 +450,21 @@ class WatchTogetherClient {
         break;
       }
 
+      case OPCODES.REMOVE_QUEUE: {
+        const index = view.getUint8(1);
+        this.queue.splice(index, 1);
+        this.emit("queueUpdated", this.queue);
+        break;
+      }
+
       case OPCODES.CHAT_MSG: {
         const sLen = view.getUint8(1);
         const sender = dec.decode(u8.subarray(2, 2 + sLen));
         const mLen = view.getUint16(2 + sLen, false);
         const message = dec.decode(u8.subarray(4 + sLen, 4 + sLen + mLen));
-        this.emit("chatMessage", { sender, message, timestamp: new Date() });
+        const msgObj = { sender, message, timestamp: new Date() };
+        this.messages.push(msgObj);
+        this.emit("chatMessage", msgObj);
         break;
       }
 
