@@ -1,5 +1,9 @@
 # Changelog
 
+## [7.3.1] - 2026-07-04
+
+fixes: download queue freeze, animepahe scraper, library tagging, and player volume resetting
+
 ## [7.3.0] - 2026-07-04
 
 ### Watch Together

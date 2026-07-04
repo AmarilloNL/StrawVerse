@@ -214,9 +214,22 @@ export default function VideoPlayer({
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
-  const [volume, setVolume] = useState(1);
-  const [isMuted, setIsMuted] = useState(false);
+  const [volume, setVolume] = useState(() => {
+    const savedVolume = localStorage.getItem("player-volume");
+    return savedVolume !== null ? parseFloat(savedVolume) : 1;
+  });
+  const [isMuted, setIsMuted] = useState(() => {
+    return localStorage.getItem("player-muted") === "true";
+  });
   const [buffered, setBuffered] = useState(0);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (video) {
+      video.volume = volume;
+      video.muted = isMuted;
+    }
+  }, [volume, isMuted, selectedSource]);
 
   const updateTimelineDOM = () => {
     const ct = currentTimeRef.current;
@@ -296,12 +309,14 @@ export default function VideoPlayer({
   const handleVolumeSliderChange = (e) => {
     const val = parseFloat(e.target.value);
     setVolume(val);
+    localStorage.setItem("player-volume", val);
     const video = videoRef.current;
     if (video) {
       video.volume = val;
       video.muted = val === 0;
     }
     setIsMuted(val === 0);
+    localStorage.setItem("player-muted", val === 0 ? "true" : "false");
   };
 
   const handleTimelineChange = (e) => {
@@ -339,6 +354,11 @@ export default function VideoPlayer({
     if (videoRef.current) {
       setVolume(videoRef.current.volume);
       setIsMuted(videoRef.current.muted);
+      localStorage.setItem("player-volume", videoRef.current.volume);
+      localStorage.setItem(
+        "player-muted",
+        videoRef.current.muted ? "true" : "false",
+      );
     }
   };
 

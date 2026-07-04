@@ -173,9 +173,16 @@ function pageLooksLikeChallenge(title, html) {
     lowerTitle.includes("just a moment") ||
     lowerTitle.includes("cloudflare") ||
     lowerTitle.includes("captcha") ||
+    lowerTitle.includes("not robot") ||
     lowerHtml.includes("just a moment") ||
     lowerHtml.includes("cloudflare") ||
-    lowerHtml.includes("captcha")
+    lowerHtml.includes("captcha") ||
+    lowerHtml.includes("cf-challenge") ||
+    lowerHtml.includes("turnstile") ||
+    lowerHtml.includes("challenge-platform") ||
+    lowerHtml.includes("challenge") ||
+    global.LastScrapperResponseCode === 403 ||
+    global.LastScrapperResponseCode === 503
   );
 }
 

@@ -247,6 +247,10 @@ async function continuousExecution() {
         await saveQueue();
         await new Promise((resolve) => setTimeout(resolve, 2000));
       } catch (err) {
+        if (err.message && err.message.includes("Queue Paused")) {
+          logger.info("[queueWorker] Download paused. Keeping item in queue.");
+          break;
+        }
         logger.error(`Error message: ${err.message}`);
         logger.error(`Stack trace: ${err.stack}`);
         AnimeQueue.splice(0, 1);

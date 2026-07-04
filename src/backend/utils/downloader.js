@@ -436,8 +436,17 @@ class downloader {
           if (
             stopDownloading ||
             (global.isQueuePaused && global.isQueuePaused())
-          )
+          ) {
+            if (
+              global.isQueuePaused &&
+              global.isQueuePaused() &&
+              !stopDownloading
+            ) {
+              stopDownloading = true;
+              reject(new Error("Queue Paused"));
+            }
             return;
+          }
 
           if (currentIndex >= this.Segments.length) {
             if (activeDownloads === 0) {
@@ -473,8 +482,17 @@ class downloader {
             if (
               stopDownloading ||
               (global.isQueuePaused && global.isQueuePaused())
-            )
+            ) {
+              if (
+                global.isQueuePaused &&
+                global.isQueuePaused() &&
+                !stopDownloading
+              ) {
+                stopDownloading = true;
+                reject(new Error("Queue Paused"));
+              }
               return;
+            }
             try {
               let Segment = this.Segments[index];
               if (!Segment) throw new Error("[ STOPPING ] Segment Missing!");
