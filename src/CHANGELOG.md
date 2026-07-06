@@ -1,5 +1,34 @@
 # Changelog
 
+# [7.4.0] - 2026-07-06
+
+### Redesigned Settings & Layout
+
+- Redesigned Settings panel into a responsive full-width row layout.
+- Moved Watch Together settings card to the General tab, simplifying the Server URL input to show only the plain domain.
+- Added Reset and HTTP `/health` connection verification controls to the Server URL config.
+- Developer Mode changes to show/hide the Logs tab.
+- Centered version headings in Release Notes with fade-gradient lines.
+
+### Consolidated Navigation
+
+- Merged Local Anime/Manga tabs into a unified **Home** view.
+- Merged Discover Anime/Manga tabs into a unified **Discover** view.
+- Centered the main header search bar and added a sliding content-type selector toggle to the far right.
+
+### Subtitle & Download Improvements
+
+- Supported raw VTT downloading and preserved overlapping sign/dialogue subtitle cues.
+- Prompted Sub/Dub/HSUB version selection dialogs on bulk and single downloads.
+- Patched AnimePahe scraper requests with Referer headers to prevent Cloudflare 403 blocks.
+- Fixed Info view Select All / Deselect All logic to target only available released items.
+
+### Bug Fixes & Deduplication
+
+- Deduplicated Watch History entries using base media IDs.
+- Fixed cover art scaling stretch on details view.
+- Fixed sidebar logo clipping on collapsed state.
+
 # [7.3.1] - 2026-07-04
 
 fixes: download queue freeze, animepahe scraper, library tagging, and player volume resetting
