@@ -73,9 +73,13 @@ function isSameOriginReferer(targetUrl, referer) {
 
 function setRefererHeaders(headers, referer, includeOrigin = false) {
   const originReferer = normalizeOrigin(referer);
+  takeHeaderCaseInsensitive(headers, "referer");
   if (originReferer) {
     headers.Referer = originReferer;
-    if (includeOrigin) headers.Origin = originReferer.slice(0, -1);
+    if (includeOrigin) {
+      takeHeaderCaseInsensitive(headers, "origin");
+      headers.Origin = originReferer.slice(0, -1);
+    }
   } else if (referer) {
     headers.Referer = referer;
   }
@@ -83,7 +87,7 @@ function setRefererHeaders(headers, referer, includeOrigin = false) {
 
 function mergeCookie(headers, cookie) {
   if (!cookie) return;
-  const existingCookie = headers.Cookie || headers.cookie || "";
+  const existingCookie = takeHeaderCaseInsensitive(headers, "cookie") || "";
   if (!existingCookie) {
     headers.Cookie = cookie;
     return;
@@ -258,8 +262,7 @@ function createScrapperWindow() {
       }
 
       const rawReferer =
-        details.requestHeaders["Referer"] ||
-        details.requestHeaders["referer"] ||
+        getHeaderCaseInsensitive(details.requestHeaders, "referer") ||
         proxyReferer;
       const isSameOrigin = isSameOriginReferer(details.url, rawReferer);
 
@@ -273,7 +276,10 @@ function createScrapperWindow() {
       } else if (referer && !isSameOrigin) {
         setRefererHeaders(details.requestHeaders, referer);
       }
-      if (userAgent) details.requestHeaders["User-Agent"] = userAgent;
+      if (userAgent) {
+        takeHeaderCaseInsensitive(details.requestHeaders, "user-agent");
+        details.requestHeaders["User-Agent"] = userAgent;
+      }
       mergeCookie(details.requestHeaders, Cookie);
 
       callback({ requestHeaders: details.requestHeaders });
@@ -639,6 +645,20 @@ global.axios = axios.create({ proxy: false, adapter: electronNetAdapter });
 global.axios.interceptors.request.use(
   async (config) => {
     const headers = getHeaders(config.url);
+    if (config.headers) {
+      if (headers["User-Agent"]) {
+        takeHeaderCaseInsensitive(config.headers, "user-agent");
+      }
+      if (headers["Referer"]) {
+        takeHeaderCaseInsensitive(config.headers, "referer");
+      }
+      if (headers["Cookie"]) {
+        const existingCookie = takeHeaderCaseInsensitive(config.headers, "cookie");
+        if (existingCookie) {
+          mergeCookie(headers, existingCookie);
+        }
+      }
+    }
     config.headers = {
       ...config.headers,
       ...headers,
