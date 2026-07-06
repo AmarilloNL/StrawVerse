@@ -17,6 +17,7 @@ import {
   Tv,
   BookOpen,
   Play,
+  Infinity,
 } from "lucide-react";
 import Swal from "sweetalert2";
 
@@ -27,6 +28,9 @@ export default function Catalog({
   onTypeChange,
 }) {
   const lastRequestRef = useRef(null);
+  const sentinelRef = useRef(null);
+  const infiniteObserverRef = useRef(null);
+  const isFetchingMoreRef = useRef(false);
 
   const [data, setData] = useState({
     results: [],
@@ -45,6 +49,10 @@ export default function Catalog({
   const [linkingMalItem, setLinkingMalItem] = useState(null);
   const [stats, setStats] = useState(null);
   const [recentHistory, setRecentHistory] = useState([]);
+  const [infiniteScroll, setInfiniteScroll] = useState(
+    () => localStorage.getItem("catalog_infinite_scroll") === "true",
+  );
+  const [infiniteLoading, setInfiniteLoading] = useState(false);
 
   const [draggedIndex, setDraggedIndex] = useState(null);
   const [dragOverIndex, setDragOverIndex] = useState(null);
@@ -158,12 +166,17 @@ export default function Catalog({
     currentFilters = activeFilters,
     searchOverride = null,
     linkingOverride = undefined,
+    isAppend = false,
   ) => {
     const currentRequestId = Math.random();
     lastRequestRef.current = currentRequestId;
 
-    setLoading(true);
-    setErrorMsg("");
+    if (!isAppend) {
+      setLoading(true);
+      setErrorMsg("");
+    } else {
+      setInfiniteLoading(true);
+    }
     try {
       const activeSearch =
         searchOverride !== null ? searchOverride : searchQuery;
@@ -195,15 +208,17 @@ export default function Catalog({
       }
 
       if (resData?.extension_missing) {
-        setErrorMsg(
-          `Extension missing. Please install a provider for ${type} in Settings.`,
-        );
-        setData({
-          results: [],
-          totalPages: 0,
-          currentPage: 1,
-          hasNextPage: false,
-        });
+        if (!isAppend) {
+          setErrorMsg(
+            `Extension missing. Please install a provider for ${type} in Settings.`,
+          );
+          setData({
+            results: [],
+            totalPages: 0,
+            currentPage: 1,
+            hasNextPage: false,
+          });
+        }
       } else if (resData?.error) {
         const lowerMsg = (resData.message || "").toLowerCase();
         const isNoResultsError =
@@ -211,26 +226,35 @@ export default function Catalog({
           lowerMsg.includes("no manga found") ||
           lowerMsg.includes("no results found");
 
-        if (!isNoResultsError) {
-          setErrorMsg(resData.message || "Failed to fetch catalog.");
-        } else {
-          setErrorMsg("");
+        if (!isAppend) {
+          if (!isNoResultsError) {
+            setErrorMsg(resData.message || "Failed to fetch catalog.");
+          } else {
+            setErrorMsg("");
+          }
+          setData({
+            results: [],
+            totalPages: 0,
+            currentPage: 1,
+            hasNextPage: false,
+          });
         }
-        setData({
-          results: [],
-          totalPages: 0,
-          currentPage: 1,
-          hasNextPage: false,
-        });
       } else {
         const sortedResults = applyCustomOrder(
           resData?.results || [],
           currentFilters,
         );
-        setData({
-          ...resData,
-          results: sortedResults,
-        });
+        if (isAppend) {
+          setData((prev) => ({
+            ...resData,
+            results: [...(prev.results || []), ...sortedResults],
+          }));
+        } else {
+          setData({
+            ...resData,
+            results: sortedResults,
+          });
+        }
         if (resData?.site && siteFilterDefs[resData.site]) {
           setAvailableFilters(siteFilterDefs[resData.site]);
         } else {
@@ -242,18 +266,22 @@ export default function Catalog({
         return;
       }
       console.error(err);
-      setErrorMsg(
-        "Failed to load data. Please verify your settings or server connection.",
-      );
-      setData({
-        results: [],
-        totalPages: 0,
-        currentPage: 1,
-        hasNextPage: false,
-      });
+      if (!isAppend) {
+        setErrorMsg(
+          "Failed to load data. Please verify your settings or server connection.",
+        );
+        setData({
+          results: [],
+          totalPages: 0,
+          currentPage: 1,
+          hasNextPage: false,
+        });
+      }
     } finally {
       if (lastRequestRef.current === currentRequestId) {
         setLoading(false);
+        setInfiniteLoading(false);
+        isFetchingMoreRef.current = false;
       }
     }
   };
@@ -585,6 +613,55 @@ export default function Catalog({
     fetchData(page);
   };
 
+  const toggleInfiniteScroll = () => {
+    const next = !infiniteScroll;
+    setInfiniteScroll(next);
+    localStorage.setItem("catalog_infinite_scroll", String(next));
+    setCurrentPage(1);
+    fetchData(1, activeFilters, searchQuery);
+  };
+
+  useEffect(() => {
+    if (infiniteObserverRef.current) {
+      infiniteObserverRef.current.disconnect();
+      infiniteObserverRef.current = null;
+    }
+    if (!infiniteScroll || !sentinelRef.current) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const entry = entries[0];
+        if (
+          entry.isIntersecting &&
+          !loading &&
+          !infiniteLoading &&
+          !isFetchingMoreRef.current &&
+          (data.hasNextPage || currentPage < (data.totalPages || 0))
+        ) {
+          const nextPage = currentPage + 1;
+          isFetchingMoreRef.current = true;
+          setCurrentPage(nextPage);
+          fetchData(nextPage, activeFilters, searchQuery, undefined, true);
+        }
+      },
+      { threshold: 0.1 },
+    );
+
+    observer.observe(sentinelRef.current);
+    infiniteObserverRef.current = observer;
+
+    return () => observer.disconnect();
+  }, [
+    infiniteScroll,
+    loading,
+    infiniteLoading,
+    data.hasNextPage,
+    data.totalPages,
+    currentPage,
+    activeFilters,
+    searchQuery,
+  ]);
+
   return (
     <div className="catalog-wrapper">
       <header
@@ -643,6 +720,22 @@ export default function Catalog({
             className={`market-tab-btn ${type === "Manga" ? "active" : ""}`}
           >
             Manga
+          </button>
+          <button
+            type="button"
+            onClick={toggleInfiniteScroll}
+            className={`market-tab-btn infinite-toggle-btn ${infiniteScroll ? "active" : ""}`}
+            title={
+              infiniteScroll
+                ? "Switch to Paginated"
+                : "Switch to Infinite Scroll"
+            }
+          >
+            <Infinity
+              size={14}
+              style={{ marginRight: "5px", verticalAlign: "middle" }}
+            />
+            Infinite
           </button>
         </div>
       </header>
@@ -948,31 +1041,52 @@ export default function Catalog({
             ))}
           </div>
 
-          {/* Pagination */}
-          {(data.totalPages > 1 || data.hasNextPage || currentPage > 1) && (
-            <div className="pagination-container">
-              <button
-                onClick={() => handlePageChange(currentPage - 1)}
-                disabled={currentPage <= 1}
-                className="btn-page"
-              >
-                <ArrowLeft size={16} />
-              </button>
-              <span className="page-info">
-                Page {currentPage}{" "}
-                {data.totalPages ? `of ${data.totalPages}` : ""}
-              </span>
-              <button
-                onClick={() => handlePageChange(currentPage + 1)}
-                disabled={
-                  !data.hasNextPage && currentPage >= (data.totalPages || 999)
-                }
-                className="btn-page"
-              >
-                <ArrowRight size={16} />
-              </button>
+          {/* Infinite scroll sentinel */}
+          {infiniteScroll && (
+            <div ref={sentinelRef} className="infinite-sentinel">
+              {infiniteLoading && (
+                <div className="infinite-loading-indicator">
+                  <Loader2 size={22} className="infinite-spin" />
+                  <span>Loading more...</span>
+                </div>
+              )}
+              {!infiniteLoading &&
+                !data.hasNextPage &&
+                currentPage >= (data.totalPages || 1) &&
+                data.results.length > 0 && (
+                  <div className="infinite-end-label">
+                    You've reached the end ✨
+                  </div>
+                )}
             </div>
           )}
+
+          {/* Pagination */}
+          {!infiniteScroll &&
+            (data.totalPages > 1 || data.hasNextPage || currentPage > 1) && (
+              <div className="pagination-container">
+                <button
+                  onClick={() => handlePageChange(currentPage - 1)}
+                  disabled={currentPage <= 1}
+                  className="btn-page"
+                >
+                  <ArrowLeft size={16} />
+                </button>
+                <span className="page-info">
+                  Page {currentPage}{" "}
+                  {data.totalPages ? `of ${data.totalPages}` : ""}
+                </span>
+                <button
+                  onClick={() => handlePageChange(currentPage + 1)}
+                  disabled={
+                    !data.hasNextPage && currentPage >= (data.totalPages || 999)
+                  }
+                  className="btn-page"
+                >
+                  <ArrowRight size={16} />
+                </button>
+              </div>
+            )}
         </div>
       )}
     </div>

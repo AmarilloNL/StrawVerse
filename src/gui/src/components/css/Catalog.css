@@ -668,3 +668,58 @@
   background-color: var(--accent);
   color: white;
 }
+
+/* Infinite scroll toggle button variant */
+.infinite-toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 4px;
+}
+
+.infinite-toggle-btn.active {
+  background: linear-gradient(135deg, #7c3aed 0%, #a855f7 100%);
+  box-shadow: 0 0 12px rgba(124, 58, 237, 0.4);
+  color: white;
+}
+
+/* Infinite scroll sentinel + loading */
+.infinite-sentinel {
+  width: 100%;
+  padding: 24px 0 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 60px;
+}
+
+.infinite-loading-indicator {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--text-muted);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.infinite-spin {
+  animation: infinite-spin-anim 1s linear infinite;
+  color: var(--accent);
+}
+
+@keyframes infinite-spin-anim {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.infinite-end-label {
+  font-size: 13px;
+  color: var(--text-muted);
+  font-weight: 500;
+  letter-spacing: 0.3px;
+  padding: 12px 0;
+}
