@@ -6,6 +6,7 @@ import {
   CheckCircle,
   Trash2,
   MessageSquare,
+  Link as LinkIcon,
 } from "lucide-react";
 import Swal from "sweetalert2";
 import watchTogetherClient from "../utils/watchTogetherClient";
@@ -15,6 +16,7 @@ export default function SettingsView({
   initialTab = "general",
   onMarketplaceOpen,
   onSelectMedia,
+  onSettingsSaved,
 }) {
   const [settings, setSettings] = useState(null);
   const [url, setUrl] = useState("");
@@ -36,8 +38,119 @@ export default function SettingsView({
   const [malDiscordProfile, setMalDiscordProfile] = useState("off");
   const [malUsername, setMalUsername] = useState(null);
   const [imageCacheSizeLimit, setImageCacheSizeLimit] = useState(5);
+  const [developerMode, setDeveloperMode] = useState("off");
   const [cacheStats, setCacheStats] = useState(null);
   const [clearingCache, setClearingCache] = useState(false);
+
+  const cleanUrlForDisplay = (url) => {
+    let cleaned = (url || "").trim();
+    cleaned = cleaned.replace(/^(wss:\/\/|ws:\/\/|https:\/\/|http:\/\/)/i, "");
+    cleaned = cleaned.replace(/\/ws$/i, "");
+    cleaned = cleaned.replace(/\/+$/, "");
+    return cleaned;
+  };
+
+  const [wtServerUrl, setWtServerUrl] = useState(
+    cleanUrlForDisplay(watchTogetherClient.getServerUrl()),
+  );
+  const [verifyingWt, setVerifyingWt] = useState(false);
+
+  const handleResetWtServer = () => {
+    const defaultDisplay = "strawverse-wt.theyogmehta.online";
+    setWtServerUrl(defaultDisplay);
+    watchTogetherClient.setServerUrl(defaultDisplay);
+    Swal.fire({
+      title: "Reset Successful",
+      text: "Watch Together server URL has been reset to default.",
+      icon: "success",
+      toast: true,
+      position: "top-end",
+      showConfirmButton: false,
+      timer: 3000,
+      background: "var(--bg-secondary)",
+      color: "var(--text-main)",
+    });
+  };
+
+  const handleVerifyWtServer = async () => {
+    let targetUrl = wtServerUrl.trim();
+    if (!targetUrl) {
+      Swal.fire({
+        title: "Invalid URL",
+        text: "Please enter a Server URL to verify.",
+        icon: "warning",
+        toast: true,
+        position: "top-end",
+        showConfirmButton: false,
+        timer: 3000,
+        background: "var(--bg-secondary)",
+        color: "var(--text-main)",
+      });
+      return;
+    }
+
+    let domain = targetUrl;
+    domain = domain.replace(/^(wss:\/\/|ws:\/\/|https:\/\/|http:\/\/)/i, "");
+    domain = domain.replace(/\/ws$/i, "");
+    domain = domain.replace(/\/health$/i, "");
+    domain = domain.replace(/\/+$/, "");
+
+    setVerifyingWt(true);
+
+    const protocols = ["https://", "http://"];
+    let success = false;
+    let serverInfo = null;
+
+    for (const proto of protocols) {
+      const healthUrl = `${proto}${domain}/health`;
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 3000);
+
+        const res = await fetch(healthUrl, { signal: controller.signal });
+        clearTimeout(timeoutId);
+
+        if (res.ok) {
+          const data = await res.json();
+          if (data && data.server === "StrawVerse Watch Together") {
+            success = true;
+            serverInfo = data;
+            break;
+          }
+        }
+      } catch (err) {
+        // Continue
+      }
+    }
+
+    setVerifyingWt(false);
+
+    if (success) {
+      Swal.fire({
+        title: "Connection Successful",
+        text: "Watch Together server verified successfully!",
+        icon: "success",
+        toast: true,
+        position: "top-end",
+        showConfirmButton: false,
+        timer: 3000,
+        background: "var(--bg-secondary)",
+        color: "var(--text-main)",
+      });
+    } else {
+      Swal.fire({
+        title: "Verification Failed",
+        text: "Could not reach a valid StrawVerse Watch Together server at this address. Make sure the domain is correct.",
+        icon: "error",
+        toast: true,
+        position: "top-end",
+        showConfirmButton: false,
+        timer: 4000,
+        background: "var(--bg-secondary)",
+        color: "var(--text-main)",
+      });
+    }
+  };
 
   const [hasChanges, setHasChanges] = useState(false);
   const [activeTab, setActiveTab] = useState(initialTab);
@@ -129,6 +242,7 @@ export default function SettingsView({
       setMalDiscordProfile(s.malDiscordProfile || "off");
       setMalUsername(data.malUsername || null);
       setImageCacheSizeLimit(s.imageCacheSizeLimit || 5);
+      setDeveloperMode(s.developerMode || "off");
 
       setHasChanges(false);
     } catch (err) {
@@ -274,6 +388,7 @@ export default function SettingsView({
           subtitleFormat: subtitleFormat,
           malDiscordProfile: malDiscordProfile,
           imageCacheSizeLimit: finalLimit,
+          developerMode: developerMode,
         }),
       });
       const data = await response.json();
@@ -293,7 +408,9 @@ export default function SettingsView({
           subtitleFormat: subtitleFormat,
           malDiscordProfile: malDiscordProfile,
           imageCacheSizeLimit: finalLimit,
+          developerMode: developerMode,
         });
+        if (onSettingsSaved) onSettingsSaved();
       } else if (data.error) {
         Swal.fire({
           title: "Error Saving Settings",
@@ -332,6 +449,7 @@ export default function SettingsView({
       mergeSubtitles !== (settings.mergeSubtitles || "off") ||
       subtitleFormat !== (settings.subtitleFormat || "vtt") ||
       malDiscordProfile !== (settings.malDiscordProfile || "off") ||
+      developerMode !== (settings.developerMode || "off") ||
       (isValidLimit && finalLimit !== (settings.imageCacheSizeLimit || 5));
 
     setHasChanges(changed);
@@ -355,6 +473,7 @@ export default function SettingsView({
     subtitleFormat,
     malDiscordProfile,
     imageCacheSizeLimit,
+    developerMode,
     settings,
   ]);
 
@@ -442,712 +561,933 @@ export default function SettingsView({
 
   return (
     <div className="settings-wrapper">
-      <header className="settings-header">
-        <h1 className="settings-title">App Settings</h1>
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: "8px",
-            fontSize: "13px",
-            color: "var(--text-muted)",
-          }}
-        >
-          {saving ? (
-            <>
-              <Loader2 size={14} className="spin" />
-              <span>Saving changes...</span>
-            </>
-          ) : hasChanges ? (
-            <span>Unsaved changes...</span>
-          ) : (
-            <>
-              <span style={{ color: "var(--success)", fontWeight: "bold" }}>
-                ✓
-              </span>
-              <span>All changes saved</span>
-            </>
-          )}
-        </div>
-      </header>
-
-      {/* Horizontal Tabs Navigation */}
-      <div className="settings-tabs-row">
-        <button
-          type="button"
-          onClick={() => setActiveTab("general")}
-          className={`settings-tab-btn ${activeTab === "general" ? "active" : ""}`}
-        >
-          General & UI
-        </button>
-        <button
-          type="button"
-          onClick={() => setActiveTab("anime_manga")}
-          className={`settings-tab-btn ${activeTab === "anime_manga" ? "active" : ""}`}
-        >
-          Anime & Manga Settings
-        </button>
-        <button
-          type="button"
-          onClick={() => setActiveTab("history")}
-          className={`settings-tab-btn ${activeTab === "history" ? "active" : ""}`}
-        >
-          History & Stats
-        </button>
-        <button
-          type="button"
-          onClick={() => setActiveTab("changelog")}
-          className={`settings-tab-btn ${activeTab === "changelog" ? "active" : ""}`}
-        >
-          Release Notes
-        </button>
-      </div>
-
-      <form onSubmit={(e) => e.preventDefault()} className="settings-form">
-        {activeTab === "general" && (
-          <div className="settings-row">
-            <div className="settings-panel glass-panel">
-              <h2 className="settings-panel-title">Directory & Discord</h2>
-              <div className="settings-input-wrapper">
-                <label className="settings-label">Download Location</label>
-                <input
-                  type="text"
-                  value={downloadLocation}
-                  onChange={(e) => setDownloadLocation(e.target.value)}
-                  className="settings-text-input"
-                  placeholder="Downloads directory path"
-                />
-              </div>
-              <div className="settings-input-wrapper">
-                <label className="settings-label">Discord Rich Presence</label>
-                <select
-                  value={discordRpc}
-                  onChange={(e) => setDiscordRpc(e.target.value)}
-                  className="settings-select"
-                >
-                  <option value="on">Enabled</option>
-                  <option value="off">Disabled</option>
-                </select>
-              </div>
-            </div>
-
-            <div className="settings-panel glass-panel">
-              <h2 className="settings-panel-title">UI Customization</h2>
-              <div className="settings-input-wrapper">
-                <label className="settings-label">Pagination Controls</label>
-                <select
-                  value={pagination}
-                  onChange={(e) => setPagination(e.target.value)}
-                  className="settings-select"
-                >
-                  <option value="on">Enabled (Page Buttons)</option>
-                  <option value="off">Disabled (Infinite Scroll)</option>
-                </select>
-              </div>
-            </div>
-
-            <div className="settings-panel glass-panel">
-              <h2 className="settings-panel-title">Storage & Cache</h2>
-              <div className="settings-input-wrapper">
-                <label className="settings-label">Image Cache Size Limit</label>
-                <div
-                  style={{ display: "flex", alignItems: "center", gap: "8px" }}
-                >
-                  <input
-                    type="number"
-                    min={5}
-                    value={imageCacheSizeLimit}
-                    onChange={(e) => {
-                      const val = parseInt(e.target.value, 10);
-                      setImageCacheSizeLimit(isNaN(val) ? "" : val);
-                    }}
-                    onBlur={(e) => {
-                      const val = parseInt(e.target.value, 10);
-                      if (isNaN(val) || val < 5) {
-                        setImageCacheSizeLimit(5);
-                      }
-                    }}
-                    className="settings-text-input"
-                    style={{ width: "100px", padding: "10px 14px" }}
-                  />
-                  <span
-                    style={{
-                      fontSize: "14px",
-                      color: "var(--text-main)",
-                      fontWeight: "600",
-                    }}
-                  >
-                    GB
-                  </span>
-                </div>
-                <span className="settings-hint">
-                  Minimum 5 GB. Automatically evicts oldest cached images if the
-                  cache folder exceeds this size.
-                </span>
-              </div>
-              <div
-                className="settings-input-wrapper"
-                style={{ marginTop: "12px" }}
-              >
-                <label className="settings-label">Current Cache Usage</label>
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                    marginTop: "4px",
-                  }}
-                >
-                  <span
-                    style={{ fontSize: "13px", color: "var(--text-muted)" }}
-                  >
-                    {cacheStats
-                      ? `${(cacheStats.sizeInBytes / (1024 * 1024)).toFixed(1)} MB (${cacheStats.filesCount} files)`
-                      : "Calculating..."}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={handleClearCache}
-                    disabled={clearingCache}
-                    className="settings-logout-btn"
-                    style={{
-                      margin: 0,
-                      padding: "6px 12px",
-                      backgroundColor: "var(--danger)",
-                      color: "white",
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "6px",
-                    }}
-                  >
-                    {clearingCache ? (
-                      <Loader2 size={14} className="spin" />
-                    ) : (
-                      <Trash2 size={14} />
-                    )}
-                    <span>Clear Image Cache</span>
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            <div className="settings-panel glass-panel">
-              <h2 className="settings-panel-title">Community & Support</h2>
-              <div className="settings-input-wrapper" style={{ gap: "10px" }}>
-                <span
-                  className="settings-hint"
-                  style={{ fontSize: "13px", lineHeight: "1.5" }}
-                >
-                  Join our Discord community to chat with other members, request
-                  features, report issues, and stay updated!
-                </span>
-                <a
-                  href="https://discord.gg/PzfUBgQ2gt"
-                  target="_blank"
-                  rel="noreferrer"
-                  className="settings-connect-link"
-                  style={{
-                    backgroundColor: "#5865F2",
-                    boxShadow: "0 4px 12px rgba(88, 101, 242, 0.25)",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    gap: "8px",
-                    marginTop: "8px",
-                  }}
-                >
-                  <MessageSquare size={16} />
-                  <span>Join Discord Server</span>
-                </a>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {activeTab === "anime_manga" && (
-          <div className="settings-row">
-            {/* Anime Settings Card */}
-            <div className="settings-panel glass-panel">
-              <h2 className="settings-panel-title">Anime Settings</h2>
-              <div className="settings-input-wrapper">
-                <label className="settings-label">Active Anime Provider</label>
-                <select
-                  value={animeProvider}
-                  onChange={(e) => setAnimeProvider(e.target.value)}
-                  className="settings-select"
-                >
-                  <option value="">None selected</option>
-                  {settings?.providers?.Anime?.map((name) => (
-                    <option key={name} value={name}>
-                      {name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="settings-input-wrapper">
-                <label className="settings-label">
-                  Preferred Streaming/Download Quality
-                </label>
-                <select
-                  value={quality}
-                  onChange={(e) => setQuality(e.target.value)}
-                  className="settings-select"
-                >
-                  <option value="1080p">1080p (Full HD)</option>
-                  <option value="720p">720p (HD)</option>
-                  <option value="360p">360p (SD)</option>
-                </select>
-              </div>
-
-              <h3 className="settings-panel-subtitle">
-                Subtitles Configuration
-              </h3>
-              <div className="settings-input-wrapper">
-                <label className="settings-label">
-                  Merge Soft Subtitles into Video
-                </label>
-                <select
-                  value={mergeSubtitles}
-                  onChange={(e) => setMergeSubtitles(e.target.value)}
-                  className="settings-select"
-                >
-                  <option value="on">Yes (Merge subtitles inside MP4)</option>
-                  <option value="off">
-                    No (Download subtitles in subfolder)
-                  </option>
-                </select>
-                <span className="settings-hint">
-                  Merges multi-lingual soft subs directly into the video stream
-                  via FFmpeg.
-                </span>
-              </div>
-              <div className="settings-input-wrapper">
-                <label className="settings-label">
-                  Subtitle Format Conversion
-                </label>
-                <select
-                  value={subtitleFormat}
-                  onChange={(e) => setSubtitleFormat(e.target.value)}
-                  className="settings-select"
-                >
-                  <option value="srt">SubRip (.srt)</option>
-                  <option value="vtt">WebVTT (.vtt)</option>
-                </select>
-              </div>
-
-              <button
-                type="button"
-                onClick={() => onMarketplaceOpen("Anime")}
-                className="settings-market-btn"
-                style={{ marginTop: "20px" }}
-              >
-                Open Anime Marketplace
-              </button>
-            </div>
-
-            {/* Manga Settings Card */}
-            <div className="settings-panel glass-panel">
-              <h2 className="settings-panel-title">Manga Settings</h2>
-              <div className="settings-input-wrapper">
-                <label className="settings-label">Active Manga Provider</label>
-                <select
-                  value={mangaProvider}
-                  onChange={(e) => setMangaProvider(e.target.value)}
-                  className="settings-select"
-                >
-                  {settings?.providers?.Manga?.map((name) => (
-                    <option key={name} value={name}>
-                      {name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="settings-input-wrapper">
-                <label className="settings-label">Auto Load Next Chapter</label>
-                <select
-                  value={autoLoadNextChapter}
-                  onChange={(e) => setAutoLoadNextChapter(e.target.value)}
-                  className="settings-select"
-                >
-                  <option value="on">Enabled</option>
-                  <option value="off">Disabled</option>
-                </select>
-              </div>
-              <button
-                type="button"
-                onClick={() => onMarketplaceOpen("Manga")}
-                className="settings-market-btn"
-                style={{ marginTop: "20px" }}
-              >
-                Open Manga Marketplace
-              </button>
-            </div>
-
-            {/* Watch Together Settings Card */}
-            <div className="settings-panel glass-panel">
-              <h2 className="settings-panel-title">Watch Together Settings</h2>
-              <div className="settings-input-wrapper">
-                <label className="settings-label">
-                  Watch Together WebSocket Server URL
-                </label>
-                <input
-                  type="text"
-                  className="settings-text-input"
-                  placeholder="https://strawverse-wt.theyogmehta.online/"
-                  defaultValue={watchTogetherClient.getServerUrl()}
-                  onChange={(e) =>
-                    watchTogetherClient.setServerUrl(e.target.value)
-                  }
-                />
-              </div>
-            </div>
-
-            {/* MyAnimeList Connection Card */}
-            <div className="settings-panel glass-panel">
-              <h2 className="settings-panel-title">MyAnimeList Connection</h2>
-              {malLoggedIn ? (
-                <div
-                  style={{
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: "14px",
-                  }}
-                >
-                  <div
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "8px",
-                      color: "var(--success)",
-                      fontWeight: "600",
-                    }}
-                  >
-                    <CheckCircle size={18} />
-                    <span>MyAnimeList account is connected!</span>
-                  </div>
-                  <div className="settings-input-wrapper">
-                    <label className="settings-label">
-                      Auto update anime status to:
-                    </label>
-                    <select
-                      value={malStatus}
-                      onChange={(e) => setMalStatus(e.target.value)}
-                      className="settings-select"
-                    >
-                      <option value="plan_to_watch">Plan To Watch</option>
-                      <option value="watching">Watching</option>
-                      <option value="completed">Completed</option>
-                      <option value="on_hold">On Hold</option>
-                      <option value="dropped">Dropped</option>
-                    </select>
-                  </div>
-                  {discordRpc === "on" && (
-                    <div className="settings-input-wrapper">
-                      <label className="settings-label">
-                        Show MAL Profile in Discord Activity
-                      </label>
-                      <select
-                        value={malDiscordProfile}
-                        onChange={(e) => setMalDiscordProfile(e.target.value)}
-                        className="settings-select"
-                      >
-                        <option value="off">No</option>
-                        <option value="on">Yes</option>
-                      </select>
-                      {malDiscordProfile === "on" && malUsername && (
-                        <span className="settings-hint">
-                          Profile button will link to: myanimelist.net/profile/
-                          {malUsername}
-                        </span>
-                      )}
-                      {malDiscordProfile === "on" && !malUsername && (
-                        <span
-                          className="settings-hint"
-                          style={{ color: "var(--danger)" }}
-                        >
-                          MAL username not found — re-authenticate to fix.
-                        </span>
-                      )}
-                    </div>
-                  )}
-                  <button
-                    type="button"
-                    onClick={handleMalLogout}
-                    className="settings-logout-btn"
-                  >
-                    <LogOut size={16} />
-                    <span>Disconnect Account</span>
-                  </button>
-                </div>
-              ) : (
-                <div
-                  style={{
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: "12px",
-                  }}
-                >
-                  <p
-                    style={{
-                      fontSize: "13px",
-                      color: "var(--text-muted)",
-                      lineHeight: "1.5",
-                    }}
-                  >
-                    Connecting your MyAnimeList account allows StrawVerse to
-                    sync your watch status, automatically update episodes in
-                    your plan-to-watch/watching lists.
-                  </p>
-                  {url ? (
-                    <a
-                      href={url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="settings-connect-link"
-                    >
-                      Authenticate MyAnimeList Account
-                    </a>
-                  ) : (
-                    <p style={{ color: "var(--danger)", fontSize: "12px" }}>
-                      No OAuth URL generated by MAL backend.
-                    </p>
-                  )}
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-        {activeTab === "history" && (
+      <div className="settings-container-inner">
+        <header className="settings-header">
+          <h1 className="settings-title">App Settings</h1>
           <div
-            style={{ display: "flex", flexDirection: "column", gap: "24px" }}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "8px",
+              fontSize: "13px",
+              color: "var(--text-muted)",
+            }}
           >
-            {statsLoading ? (
-              <div className="settings-loading-center">
-                <Loader2 size={32} className="spin" />
-                <p>Loading history data...</p>
-              </div>
+            {saving ? (
+              <>
+                <Loader2 size={14} className="spin" />
+                <span>Saving changes...</span>
+              </>
+            ) : hasChanges ? (
+              <span>Unsaved changes...</span>
             ) : (
               <>
-                {/* Stats Dashboard Grid */}
-                <div className="settings-stats-grid">
-                  <div className="settings-stat-card glass-panel">
-                    <span className="settings-stat-card-title">
-                      Total Watch Time
-                    </span>
-                    <h3 className="settings-stat-card-val">
-                      {stats?.watchHours || 0}{" "}
-                      <span className="settings-stat-unit">hrs</span>
-                    </h3>
-                    <p className="settings-stat-card-sub">
-                      {stats?.completedEpisodes || 0} episodes completed (
-                      {stats?.distinctAnime || 0} titles)
-                    </p>
-                  </div>
-                  <div className="settings-stat-card glass-panel">
-                    <span className="settings-stat-card-title">
-                      Total Read Time
-                    </span>
-                    <h3 className="settings-stat-card-val">
-                      {stats?.readHours || 0}{" "}
-                      <span className="settings-stat-unit">hrs</span>
-                    </h3>
-                    <p className="settings-stat-card-sub">
-                      {stats?.completedChapters || 0} chapters completed (
-                      {stats?.distinctManga || 0} titles)
-                    </p>
-                  </div>
-                </div>
-
-                {/* History Timeline */}
-                <div className="settings-panel glass-panel">
-                  <div
-                    style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      alignItems: "center",
-                      marginBottom: "20px",
-                      borderBottom: "1px dashed var(--border)",
-                      paddingBottom: "10px",
-                    }}
-                  >
-                    <h2
-                      className="settings-panel-title"
-                      style={{
-                        margin: 0,
-                        borderBottom: "none",
-                        paddingBottom: 0,
-                      }}
-                    >
-                      Recent Activity History
-                    </h2>
-                    {historyList.length > 0 && (
-                      <button
-                        type="button"
-                        onClick={handleClearHistory}
-                        className="settings-clear-history-btn"
-                        style={{
-                          background: "rgba(239, 68, 68, 0.15)",
-                          border: "1.5px solid var(--danger)",
-                          color: "var(--danger)",
-                          borderRadius: "6px",
-                          padding: "6px 14px",
-                          fontSize: "12px",
-                          fontWeight: "600",
-                          cursor: "pointer",
-                          transition: "all 0.2s ease",
-                        }}
-                      >
-                        Clear History
-                      </button>
-                    )}
-                  </div>
-                  {historyList.length === 0 ? (
-                    <p
-                      style={{
-                        color: "var(--text-muted)",
-                        fontSize: "13px",
-                        fontStyle: "italic",
-                        padding: "10px 0",
-                      }}
-                    >
-                      No history records found yet. Go watch some anime or read
-                      some manga!
-                    </p>
-                  ) : (
-                    <div className="settings-history-list-container">
-                      {historyList.map((item, idx) => {
-                        const formattedTime =
-                          item.time_spent > 3600
-                            ? `${(item.time_spent / 3600).toFixed(1)} hours`
-                            : item.time_spent > 60
-                              ? `${Math.round(item.time_spent / 60)} minutes`
-                              : `${Math.round(item.time_spent)} seconds`;
-
-                        const formattedDate = new Date(
-                          item.date,
-                        ).toLocaleString([], {
-                          month: "short",
-                          day: "numeric",
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        });
-
-                        return (
-                          <div
-                            key={idx}
-                            className="settings-history-item clickable"
-                            onClick={() => {
-                              if (onSelectMedia && item.media_id) {
-                                onSelectMedia(
-                                  item.media_id,
-                                  item.type,
-                                  item.provider || "local",
-                                  "Back to Settings",
-                                );
-                              }
-                            }}
-                          >
-                            <div className="settings-history-item-left">
-                              <span
-                                className={`settings-history-type-badge ${item.type === "Anime" ? "" : "manga"}`}
-                              >
-                                {item.type}
-                              </span>
-                              <div
-                                style={{
-                                  display: "flex",
-                                  flexDirection: "column",
-                                  gap: "4px",
-                                }}
-                              >
-                                <div
-                                  style={{
-                                    display: "flex",
-                                    alignItems: "center",
-                                    gap: "8px",
-                                    flexWrap: "wrap",
-                                  }}
-                                >
-                                  <strong className="settings-history-item-title">
-                                    {item.title}
-                                  </strong>
-                                  {item.is_completed === 1 && (
-                                    <span
-                                      className="settings-completed-badge"
-                                      style={{
-                                        fontSize: "9px",
-                                        padding: "2px 6px",
-                                      }}
-                                    >
-                                      Completed
-                                    </span>
-                                  )}
-                                </div>
-                                <span className="settings-history-item-meta">
-                                  {item.type === "Anime"
-                                    ? "Episode"
-                                    : "Chapter"}{" "}
-                                  {item.number} • Spent {formattedTime}
-                                </span>
-                              </div>
-                            </div>
-                            <div
-                              style={{
-                                display: "flex",
-                                alignItems: "center",
-                                gap: "16px",
-                                flexShrink: 0,
-                              }}
-                            >
-                              <span className="settings-history-item-date">
-                                {formattedDate}
-                              </span>
-                              <button
-                                type="button"
-                                className="history-delete-btn"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleDeleteHistory(
-                                    item.type,
-                                    item.id,
-                                    item.title,
-                                    item.number,
-                                  );
-                                }}
-                                title="Delete history entry"
-                              >
-                                <Trash2 size={16} />
-                              </button>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
+                <span style={{ color: "var(--success)", fontWeight: "bold" }}>
+                  ✓
+                </span>
+                <span>All changes saved</span>
               </>
             )}
           </div>
-        )}
+        </header>
 
-        {activeTab === "changelog" && (
-          <div className="settings-panel glass-panel">
-            <h2 className="settings-panel-title">Release Notes / Changelog</h2>
-            {changelogLoading ? (
-              <div className="settings-loading-center">
-                <Loader2 size={32} className="spin" />
-                <p>Loading release notes...</p>
+        {/* Horizontal Tabs Navigation */}
+        <div className="settings-tabs-row">
+          <button
+            type="button"
+            onClick={() => setActiveTab("general")}
+            className={`settings-tab-btn ${activeTab === "general" ? "active" : ""}`}
+          >
+            General & UI
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab("anime_manga")}
+            className={`settings-tab-btn ${activeTab === "anime_manga" ? "active" : ""}`}
+          >
+            Anime & Manga Settings
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab("history")}
+            className={`settings-tab-btn ${activeTab === "history" ? "active" : ""}`}
+          >
+            History & Stats
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab("changelog")}
+            className={`settings-tab-btn ${activeTab === "changelog" ? "active" : ""}`}
+          >
+            Release Notes
+          </button>
+        </div>
+
+        <form onSubmit={(e) => e.preventDefault()} className="settings-form">
+          {activeTab === "general" && (
+            <div className="settings-column">
+              {/* General Settings */}
+              <div className="settings-section glass-panel">
+                <h2 className="settings-section-title">General Settings</h2>
+
+                <div className="settings-row-item">
+                  <div className="settings-row-info">
+                    <div className="settings-row-label">Download Location</div>
+                    <div className="settings-row-hint">
+                      Directory path where your downloaded media files will be
+                      saved.
+                    </div>
+                  </div>
+                  <div className="settings-row-control">
+                    <input
+                      type="text"
+                      value={downloadLocation}
+                      onChange={(e) => setDownloadLocation(e.target.value)}
+                      className="settings-text-input"
+                      placeholder="Downloads directory path"
+                    />
+                  </div>
+                </div>
+
+                <div className="settings-row-item">
+                  <div className="settings-row-info">
+                    <div className="settings-row-label">
+                      Discord Rich Presence
+                    </div>
+                    <div className="settings-row-hint">
+                      Show what you are currently watching or reading on your
+                      Discord profile activity.
+                    </div>
+                  </div>
+                  <div className="settings-row-control">
+                    <select
+                      value={discordRpc}
+                      onChange={(e) => setDiscordRpc(e.target.value)}
+                      className="settings-select"
+                    >
+                      <option value="on">Enabled</option>
+                      <option value="off">Disabled</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="settings-row-item">
+                  <div className="settings-row-info">
+                    <div className="settings-row-label">Developer Mode</div>
+                    <div className="settings-row-hint">
+                      Enable advanced logs viewer tab and debug utilities.
+                    </div>
+                  </div>
+                  <div className="settings-row-control">
+                    <select
+                      value={developerMode}
+                      onChange={(e) => setDeveloperMode(e.target.value)}
+                      className="settings-select"
+                    >
+                      <option value="on">Enabled</option>
+                      <option value="off">Disabled</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="settings-row-item">
+                  <div className="settings-row-info">
+                    <div className="settings-row-label">
+                      Pagination Controls
+                    </div>
+                    <div className="settings-row-hint">
+                      Toggle between numbered pages or infinite scroll loading.
+                    </div>
+                  </div>
+                  <div className="settings-row-control">
+                    <select
+                      value={pagination}
+                      onChange={(e) => setPagination(e.target.value)}
+                      className="settings-select"
+                    >
+                      <option value="on">Enabled (Page Buttons)</option>
+                      <option value="off">Disabled (Infinite Scroll)</option>
+                    </select>
+                  </div>
+                </div>
               </div>
-            ) : changelog ? (
-              <ChangelogRenderer markdown={changelog} />
-            ) : (
-              <p style={{ color: "var(--text-muted)", fontSize: "13px" }}>
-                Failed to load release notes.
-              </p>
-            )}
-          </div>
-        )}
-      </form>
+
+              {/* Watch Together Settings */}
+              <div className="settings-section glass-panel">
+                <h2 className="settings-section-title">
+                  Watch Together Settings
+                </h2>
+
+                <div className="settings-row-item">
+                  <div className="settings-row-info">
+                    <div className="settings-row-label">Server URL</div>
+                    <div className="settings-row-hint">
+                      The server address used to host and join Watch Together
+                      rooms with friends.
+                    </div>
+                  </div>
+                  <div
+                    className="settings-row-control"
+                    style={{
+                      flexDirection: "column",
+                      gap: "8px",
+                      alignItems: "flex-end",
+                    }}
+                  >
+                    <input
+                      type="text"
+                      className="settings-text-input"
+                      placeholder="strawverse-wt.theyogmehta.online"
+                      value={wtServerUrl}
+                      onChange={(e) => {
+                        setWtServerUrl(e.target.value);
+                        watchTogetherClient.setServerUrl(e.target.value);
+                      }}
+                    />
+                    <div
+                      style={{ display: "flex", gap: "8px", marginTop: "4px" }}
+                    >
+                      <button
+                        type="button"
+                        onClick={handleVerifyWtServer}
+                        disabled={verifyingWt}
+                        className="settings-market-btn"
+                        style={{
+                          margin: 0,
+                          padding: "6px 12px",
+                          fontSize: "12px",
+                        }}
+                      >
+                        {verifyingWt ? "Verifying..." : "Verify Connection"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleResetWtServer}
+                        className="settings-logout-btn"
+                        style={{
+                          margin: 0,
+                          padding: "6px 12px",
+                          fontSize: "12px",
+                          backgroundColor: "rgba(255, 255, 255, 0.05)",
+                          border: "1px solid var(--border)",
+                          color: "var(--text-muted)",
+                        }}
+                      >
+                        Reset to Default
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Storage & Cache */}
+              <div className="settings-section glass-panel">
+                <h2 className="settings-section-title">Storage & Cache</h2>
+
+                <div className="settings-row-item">
+                  <div className="settings-row-info">
+                    <div className="settings-row-label">
+                      Image Cache Size Limit
+                    </div>
+                    <div className="settings-row-hint">
+                      Maximum storage space allowed for external poster images.
+                      (Minimum 5 GB)
+                    </div>
+                  </div>
+                  <div
+                    className="settings-row-control"
+                    style={{ gap: "8px", alignItems: "center" }}
+                  >
+                    <input
+                      type="number"
+                      min={5}
+                      value={imageCacheSizeLimit}
+                      onChange={(e) => {
+                        const val = parseInt(e.target.value, 10);
+                        setImageCacheSizeLimit(isNaN(val) ? "" : val);
+                      }}
+                      onBlur={(e) => {
+                        const val = parseInt(e.target.value, 10);
+                        if (isNaN(val) || val < 5) {
+                          setImageCacheSizeLimit(5);
+                        }
+                      }}
+                      className="settings-text-input"
+                      style={{ width: "90px", textAlign: "center" }}
+                    />
+                    <span
+                      style={{
+                        fontSize: "14px",
+                        fontWeight: "600",
+                        color: "var(--text-main)",
+                      }}
+                    >
+                      GB
+                    </span>
+                  </div>
+                </div>
+
+                <div className="settings-row-item">
+                  <div className="settings-row-info">
+                    <div className="settings-row-label">
+                      Current Cache Usage
+                    </div>
+                    <div className="settings-row-hint">
+                      {cacheStats
+                        ? `${(cacheStats.sizeInBytes / (1024 * 1024)).toFixed(1)} MB (${cacheStats.filesCount} files)`
+                        : "Calculating..."}
+                    </div>
+                  </div>
+                  <div className="settings-row-control">
+                    <button
+                      type="button"
+                      onClick={handleClearCache}
+                      disabled={clearingCache}
+                      className="settings-logout-btn"
+                      style={{
+                        margin: 0,
+                        backgroundColor: "var(--danger)",
+                        color: "white",
+                        border: "none",
+                      }}
+                    >
+                      {clearingCache ? (
+                        <Loader2 size={14} className="spin" />
+                      ) : (
+                        <Trash2 size={14} />
+                      )}
+                      <span>Clear Image Cache</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Community & Support */}
+              <div className="settings-section glass-panel">
+                <h2 className="settings-section-title">Community & Support</h2>
+                <div className="settings-row-item">
+                  <div className="settings-row-info">
+                    <div className="settings-row-label">
+                      Discord Community Server
+                    </div>
+                    <div className="settings-row-hint">
+                      Join our Discord server to get help, request features, and
+                      stay up to date.
+                    </div>
+                  </div>
+                  <div className="settings-row-control">
+                    <a
+                      href="https://discord.gg/PzfUBgQ2gt"
+                      target="_blank"
+                      rel="noreferrer"
+                      className="settings-connect-link"
+                      style={{
+                        backgroundColor: "#5865F2",
+                        boxShadow: "0 4px 12px rgba(88, 101, 242, 0.25)",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "8px",
+                        margin: 0,
+                      }}
+                    >
+                      <MessageSquare size={16} />
+                      <span>Join Discord</span>
+                    </a>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {activeTab === "anime_manga" && (
+            <div className="settings-column">
+              {/* Anime Settings */}
+              <div className="settings-section glass-panel">
+                <h2 className="settings-section-title">Anime Settings</h2>
+
+                <div className="settings-row-item">
+                  <div className="settings-row-info">
+                    <div className="settings-row-label">
+                      Active Anime Provider
+                    </div>
+                    <div className="settings-row-hint">
+                      Default scrapers used to search and stream anime episodes.
+                    </div>
+                  </div>
+                  <div className="settings-row-control">
+                    <select
+                      value={animeProvider}
+                      onChange={(e) => setAnimeProvider(e.target.value)}
+                      className="settings-select"
+                    >
+                      <option value="">None selected</option>
+                      {settings?.providers?.Anime?.map((name) => (
+                        <option key={name} value={name}>
+                          {name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                <div className="settings-row-item">
+                  <div className="settings-row-info">
+                    <div className="settings-row-label">Preferred Quality</div>
+                    <div className="settings-row-hint">
+                      Streaming and downloading resolution defaults.
+                    </div>
+                  </div>
+                  <div className="settings-row-control">
+                    <select
+                      value={quality}
+                      onChange={(e) => setQuality(e.target.value)}
+                      className="settings-select"
+                    >
+                      <option value="1080p">1080p (Full HD)</option>
+                      <option value="720p">720p (HD)</option>
+                      <option value="360p">360p (SD)</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="settings-row-item">
+                  <div className="settings-row-info">
+                    <div className="settings-row-label">
+                      Merge Soft Subtitles
+                    </div>
+                    <div className="settings-row-hint">
+                      Automatically merge downloaded subtitles into the video
+                      file container using FFmpeg.
+                    </div>
+                  </div>
+                  <div className="settings-row-control">
+                    <select
+                      value={mergeSubtitles}
+                      onChange={(e) => setMergeSubtitles(e.target.value)}
+                      className="settings-select"
+                    >
+                      <option value="on">
+                        Yes (Merge subtitles inside MP4)
+                      </option>
+                      <option value="off">
+                        No (Download subtitles in subfolder)
+                      </option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="settings-row-item">
+                  <div className="settings-row-info">
+                    <div className="settings-row-label">Subtitle Format</div>
+                    <div className="settings-row-hint">
+                      Subtitle file format used for download and merge
+                      operations.
+                    </div>
+                  </div>
+                  <div className="settings-row-control">
+                    <select
+                      value={subtitleFormat}
+                      onChange={(e) => setSubtitleFormat(e.target.value)}
+                      className="settings-select"
+                    >
+                      <option value="srt">SubRip (.srt)</option>
+                      <option value="vtt">WebVTT (.vtt)</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="settings-row-item">
+                  <div className="settings-row-info">
+                    <div className="settings-row-label">Manage Extensions</div>
+                    <div className="settings-row-hint">
+                      Install, update, or configure anime scraper providers.
+                    </div>
+                  </div>
+                  <div className="settings-row-control">
+                    <button
+                      type="button"
+                      onClick={() => onMarketplaceOpen("Anime")}
+                      className="settings-market-btn"
+                      style={{ margin: 0 }}
+                    >
+                      Open Anime Extensions
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Manga Settings */}
+              <div className="settings-section glass-panel">
+                <h2 className="settings-section-title">Manga Settings</h2>
+
+                <div className="settings-row-item">
+                  <div className="settings-row-info">
+                    <div className="settings-row-label">
+                      Active Manga Provider
+                    </div>
+                    <div className="settings-row-hint">
+                      Default scrapers used to search and read manga chapters.
+                    </div>
+                  </div>
+                  <div className="settings-row-control">
+                    <select
+                      value={mangaProvider}
+                      onChange={(e) => setMangaProvider(e.target.value)}
+                      className="settings-select"
+                    >
+                      {settings?.providers?.Manga?.map((name) => (
+                        <option key={name} value={name}>
+                          {name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                <div className="settings-row-item">
+                  <div className="settings-row-info">
+                    <div className="settings-row-label">
+                      Auto Load Next Chapter
+                    </div>
+                    <div className="settings-row-hint">
+                      Automatically fetch and display the next chapter when
+                      scrolling to the end.
+                    </div>
+                  </div>
+                  <div className="settings-row-control">
+                    <select
+                      value={autoLoadNextChapter}
+                      onChange={(e) => setAutoLoadNextChapter(e.target.value)}
+                      className="settings-select"
+                    >
+                      <option value="on">Enabled</option>
+                      <option value="off">Disabled</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="settings-row-item">
+                  <div className="settings-row-info">
+                    <div className="settings-row-label">Manage Extensions</div>
+                    <div className="settings-row-hint">
+                      Install, update, or configure manga scraper providers.
+                    </div>
+                  </div>
+                  <div className="settings-row-control">
+                    <button
+                      type="button"
+                      onClick={() => onMarketplaceOpen("Manga")}
+                      className="settings-market-btn"
+                      style={{ margin: 0 }}
+                    >
+                      Open Manga Extensions
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* MyAnimeList Connection */}
+              <div className="settings-section glass-panel">
+                <h2 className="settings-section-title">
+                  MyAnimeList Integration
+                </h2>
+
+                {malLoggedIn ? (
+                  <>
+                    <div className="settings-row-item">
+                      <div className="settings-row-info">
+                        <div className="settings-row-label">
+                          Connection Status
+                        </div>
+                        <div className="settings-row-hint">
+                          Syncs watch/read status automatically to your MAL
+                          profile.
+                        </div>
+                      </div>
+                      <div className="settings-row-control">
+                        <div
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "8px",
+                            color: "var(--success)",
+                            fontWeight: "600",
+                            fontSize: "14px",
+                          }}
+                        >
+                          <CheckCircle size={18} />
+                          <span>Connected</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="settings-row-item">
+                      <div className="settings-row-info">
+                        <div className="settings-row-label">
+                          Auto-update Status
+                        </div>
+                        <div className="settings-row-hint">
+                          Default status applied to media when starting or
+                          completing.
+                        </div>
+                      </div>
+                      <div className="settings-row-control">
+                        <select
+                          value={malStatus}
+                          onChange={(e) => setMalStatus(e.target.value)}
+                          className="settings-select"
+                        >
+                          <option value="plan_to_watch">Plan To Watch</option>
+                          <option value="watching">Watching</option>
+                          <option value="completed">Completed</option>
+                          <option value="on_hold">On Hold</option>
+                          <option value="dropped">Dropped</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    {discordRpc === "on" && (
+                      <div className="settings-row-item">
+                        <div className="settings-row-info">
+                          <div className="settings-row-label">
+                            Show MAL in Discord Activity
+                          </div>
+                          <div className="settings-row-hint">
+                            Embed MAL link buttons inside your Discord Rich
+                            Presence activity profile.
+                            {malUsername &&
+                              ` (Profile: myanimelist.net/profile/${malUsername})`}
+                          </div>
+                        </div>
+                        <div
+                          className="settings-row-control"
+                          style={{
+                            flexDirection: "column",
+                            alignItems: "flex-end",
+                            gap: "4px",
+                          }}
+                        >
+                          <select
+                            value={malDiscordProfile}
+                            onChange={(e) =>
+                              setMalDiscordProfile(e.target.value)
+                            }
+                            className="settings-select"
+                          >
+                            <option value="off">No</option>
+                            <option value="on">Yes</option>
+                          </select>
+                          {!malUsername && (
+                            <span
+                              className="settings-hint"
+                              style={{ color: "var(--danger)" }}
+                            >
+                              MAL username not found — re-authenticate.
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="settings-row-item">
+                      <div className="settings-row-info">
+                        <div className="settings-row-label">
+                          Account Options
+                        </div>
+                        <div className="settings-row-hint">
+                          Disconnect and remove MyAnimeList credentials from
+                          StrawVerse.
+                        </div>
+                      </div>
+                      <div className="settings-row-control">
+                        <button
+                          type="button"
+                          onClick={handleMalLogout}
+                          className="settings-logout-btn"
+                          style={{ margin: 0 }}
+                        >
+                          <LogOut size={16} />
+                          <span>Disconnect Account</span>
+                        </button>
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <div className="settings-row-item">
+                    <div className="settings-row-info">
+                      <div className="settings-row-label">
+                        MyAnimeList Progress Sync
+                      </div>
+                      <div className="settings-row-hint">
+                        Connect your account to synchronize your watch and read
+                        progress automatically.
+                      </div>
+                    </div>
+                    <div className="settings-row-control">
+                      {url ? (
+                        <a
+                          href={url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="settings-connect-link"
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "8px",
+                            margin: 0,
+                          }}
+                        >
+                          <LinkIcon size={16} />
+                          <span>Authenticate Account</span>
+                        </a>
+                      ) : (
+                        <span
+                          style={{
+                            color: "var(--danger)",
+                            fontSize: "12px",
+                            fontWeight: "600",
+                          }}
+                        >
+                          OAuth URL Error
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+          {activeTab === "history" && (
+            <div
+              style={{ display: "flex", flexDirection: "column", gap: "24px" }}
+            >
+              {statsLoading ? (
+                <div className="settings-loading-center">
+                  <Loader2 size={32} className="spin" />
+                  <p>Loading history data...</p>
+                </div>
+              ) : (
+                <>
+                  {/* Stats Dashboard Grid */}
+                  <div className="settings-stats-grid">
+                    <div className="settings-stat-card glass-panel">
+                      <span className="settings-stat-card-title">
+                        Total Watch Time
+                      </span>
+                      <h3 className="settings-stat-card-val">
+                        {stats?.watchHours || 0}{" "}
+                        <span className="settings-stat-unit">hrs</span>
+                      </h3>
+                      <p className="settings-stat-card-sub">
+                        {stats?.completedEpisodes || 0} episodes watched (
+                        {stats?.distinctAnime || 0} titles)
+                      </p>
+                    </div>
+                    <div className="settings-stat-card glass-panel">
+                      <span className="settings-stat-card-title">
+                        Total Read Time
+                      </span>
+                      <h3 className="settings-stat-card-val">
+                        {stats?.readHours || 0}{" "}
+                        <span className="settings-stat-unit">hrs</span>
+                      </h3>
+                      <p className="settings-stat-card-sub">
+                        {stats?.completedChapters || 0} chapters completed (
+                        {stats?.distinctManga || 0} titles)
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* History Timeline */}
+                  <div className="settings-panel glass-panel">
+                    <div
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        marginBottom: "20px",
+                        borderBottom: "1px dashed var(--border)",
+                        paddingBottom: "10px",
+                      }}
+                    >
+                      <h2
+                        className="settings-panel-title"
+                        style={{
+                          margin: 0,
+                          borderBottom: "none",
+                          paddingBottom: 0,
+                        }}
+                      >
+                        Recent Activity History
+                      </h2>
+                      {historyList.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={handleClearHistory}
+                          className="settings-clear-history-btn"
+                          style={{
+                            background: "rgba(239, 68, 68, 0.15)",
+                            border: "1.5px solid var(--danger)",
+                            color: "var(--danger)",
+                            borderRadius: "6px",
+                            padding: "6px 14px",
+                            fontSize: "12px",
+                            fontWeight: "600",
+                            cursor: "pointer",
+                            transition: "all 0.2s ease",
+                          }}
+                        >
+                          Clear History
+                        </button>
+                      )}
+                    </div>
+                    {historyList.length === 0 ? (
+                      <p
+                        style={{
+                          color: "var(--text-muted)",
+                          fontSize: "13px",
+                          fontStyle: "italic",
+                          padding: "10px 0",
+                        }}
+                      >
+                        No history records found yet. Go watch some anime or
+                        read some manga!
+                      </p>
+                    ) : (
+                      <div className="settings-history-list-container">
+                        {historyList.map((item, idx) => {
+                          const formattedTime =
+                            item.time_spent > 3600
+                              ? `${(item.time_spent / 3600).toFixed(1)} hours`
+                              : item.time_spent > 60
+                                ? `${Math.round(item.time_spent / 60)} minutes`
+                                : `${Math.round(item.time_spent)} seconds`;
+
+                          const formattedDate = new Date(
+                            item.date,
+                          ).toLocaleString([], {
+                            month: "short",
+                            day: "numeric",
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          });
+
+                          return (
+                            <div
+                              key={idx}
+                              className="settings-history-item clickable"
+                              onClick={() => {
+                                if (onSelectMedia && item.media_id) {
+                                  onSelectMedia(
+                                    item.media_id,
+                                    item.type,
+                                    item.provider || "local",
+                                    "Back to Settings",
+                                  );
+                                }
+                              }}
+                            >
+                              <div className="settings-history-item-left">
+                                <span
+                                  className={`settings-history-type-badge ${item.type === "Anime" ? "" : "manga"}`}
+                                >
+                                  {item.type}
+                                </span>
+                                <div
+                                  style={{
+                                    display: "flex",
+                                    flexDirection: "column",
+                                    gap: "4px",
+                                  }}
+                                >
+                                  <div
+                                    style={{
+                                      display: "flex",
+                                      alignItems: "center",
+                                      gap: "8px",
+                                      flexWrap: "wrap",
+                                    }}
+                                  >
+                                    <strong className="settings-history-item-title">
+                                      {item.title}
+                                    </strong>
+                                    {item.is_completed === 1 && (
+                                      <span
+                                        className="settings-completed-badge"
+                                        style={{
+                                          fontSize: "9px",
+                                          padding: "2px 6px",
+                                        }}
+                                      >
+                                        Completed
+                                      </span>
+                                    )}
+                                  </div>
+                                  <span className="settings-history-item-meta">
+                                    {item.type === "Anime"
+                                      ? "Episode"
+                                      : "Chapter"}{" "}
+                                    {item.number} • Spent {formattedTime}
+                                  </span>
+                                </div>
+                              </div>
+                              <div
+                                style={{
+                                  display: "flex",
+                                  alignItems: "center",
+                                  gap: "16px",
+                                  flexShrink: 0,
+                                }}
+                              >
+                                <span className="settings-history-item-date">
+                                  {formattedDate}
+                                </span>
+                                <button
+                                  type="button"
+                                  className="history-delete-btn"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleDeleteHistory(
+                                      item.type,
+                                      item.id,
+                                      item.title,
+                                      item.number,
+                                    );
+                                  }}
+                                  title="Delete history entry"
+                                >
+                                  <Trash2 size={16} />
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+
+          {activeTab === "changelog" && (
+            <div className="settings-panel glass-panel">
+              {changelogLoading ? (
+                <div className="settings-loading-center">
+                  <Loader2 size={32} className="spin" />
+                  <p>Loading release notes...</p>
+                </div>
+              ) : changelog ? (
+                <ChangelogRenderer markdown={changelog} />
+              ) : (
+                <p style={{ color: "var(--text-muted)", fontSize: "13px" }}>
+                  Failed to load release notes.
+                </p>
+              )}
+            </div>
+          )}
+        </form>
+      </div>
     </div>
   );
 }
@@ -1160,11 +1500,15 @@ function ChangelogRenderer({ markdown }) {
     <div className="changelog-container">
       {lines.map((line, idx) => {
         if (line.startsWith("# ")) {
-          return (
-            <h1 key={idx} className="changelog-h1">
-              {line.replace("# ", "")}
-            </h1>
-          );
+          const content = line.replace("# ", "").trim();
+          if (content.startsWith("[") && content.includes("]")) {
+            return (
+              <h1 key={idx} className="changelog-h1">
+                {content}
+              </h1>
+            );
+          }
+          return null;
         }
         if (line.startsWith("## ")) {
           return (

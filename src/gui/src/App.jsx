@@ -12,9 +12,11 @@ import WatchTogetherView from "./components/WatchTogetherView";
 import WatchTogetherBar from "./components/WatchTogetherBar";
 
 export default function App() {
-  const [history, setHistory] = useState([{ view: "local-anime", params: {} }]);
+  const [history, setHistory] = useState([{ view: "home", params: {} }]);
+  const [contentType, setContentType] = useState("Anime");
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [malLoggedIn, setMalLoggedIn] = useState(false);
+  const [developerMode, setDeveloperMode] = useState("off");
   const [whatsNewData, setWhatsNewData] = useState(null);
   const [whatsNewVersion, setWhatsNewVersion] = useState("");
   const [whatsNewDate, setWhatsNewDate] = useState("");
@@ -43,7 +45,7 @@ export default function App() {
   };
 
   const current = history[history.length - 1] || {
-    view: "local-anime",
+    view: "home",
     params: {},
   };
 
@@ -276,10 +278,15 @@ export default function App() {
       const settingsRes = await fetch("/api/settings");
       const settingsData = await settingsRes.json();
       setMalLoggedIn(settingsData.MalLoggedIn || false);
+      setDeveloperMode(settingsData.settings?.developerMode || "off");
     } catch (err) {
       console.error("Failed to sync app info:", err);
     }
   };
+
+  useEffect(() => {
+    syncSettings();
+  }, [current.view]);
 
   useEffect(() => {
     if (window.sharedStateAPI && window.sharedStateAPI.checkWhatsNew) {
@@ -333,31 +340,16 @@ export default function App() {
 
   const renderActiveView = () => {
     switch (current.view) {
-      case "local-anime":
+      case "home":
         return (
           <Catalog
-            type="Anime"
+            type={contentType}
             provider="local"
+            onTypeChange={setContentType}
             onSelectMedia={(id, prov, backText, autoPlay) =>
               navigateTo("info", {
                 id,
-                type: "Anime",
-                provider: "local",
-                backText,
-                autoPlay,
-              })
-            }
-          />
-        );
-      case "local-manga":
-        return (
-          <Catalog
-            type="Manga"
-            provider="local"
-            onSelectMedia={(id, prov, backText, autoPlay) =>
-              navigateTo("info", {
-                id,
-                type: "Manga",
+                type: contentType,
                 provider: "local",
                 backText,
                 autoPlay,
@@ -366,31 +358,16 @@ export default function App() {
           />
         );
 
-      case "anime-catalog":
+      case "discover":
         return (
           <Catalog
-            type="Anime"
+            type={contentType}
             provider="provider"
+            onTypeChange={setContentType}
             onSelectMedia={(id, prov, backText, autoPlay) =>
               navigateTo("info", {
                 id,
-                type: "Anime",
-                provider: "provider",
-                backText,
-                autoPlay,
-              })
-            }
-          />
-        );
-      case "manga-catalog":
-        return (
-          <Catalog
-            type="Manga"
-            provider="provider"
-            onSelectMedia={(id, prov, backText, autoPlay) =>
-              navigateTo("info", {
-                id,
-                type: "Manga",
+                type: contentType,
                 provider: "provider",
                 backText,
                 autoPlay,
@@ -539,6 +516,7 @@ export default function App() {
                 backText,
               })
             }
+            onSettingsSaved={() => syncSettings()}
           />
         );
       case "marketplace":
@@ -556,6 +534,7 @@ export default function App() {
         isCollapsed={isSidebarCollapsed}
         toggleCollapse={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
         malLoggedIn={malLoggedIn}
+        developerMode={developerMode}
         onOpenWatchTogether={() => setIsWTModalOpen(true)}
       />
       <main style={{ flex: 1, height: "100%", overflow: "hidden" }}>

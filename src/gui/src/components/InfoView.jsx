@@ -799,18 +799,17 @@ export default function InfoView({
 
   const handleSelectAll = () => {
     const nextSelected = new Set(selectedItems);
-    const allSelected = selectedItems.size >= totalItemsCount;
+    const allSelected =
+      selectableItems.length > 0 &&
+      selectableItems.every((item) => selectedItems.has(Number(item.number)));
 
     if (allSelected) {
-      nextSelected.clear();
+      selectableItems.forEach((item) => {
+        nextSelected.delete(Number(item.number));
+      });
     } else {
-      for (let i = 1; i <= totalItemsCount; i++) {
-        nextSelected.add(i);
-      }
-      episodesOrChapters.forEach((item) => {
-        if (!isItemUnavailable(item)) {
-          nextSelected.add(Number(item.number));
-        }
+      selectableItems.forEach((item) => {
+        nextSelected.add(Number(item.number));
       });
     }
     setSelectedItems(nextSelected);
@@ -949,43 +948,63 @@ export default function InfoView({
       let chosenLang = null;
 
       if (isAnime) {
-        if (singleItem) {
-          const hasSub =
-            singleItem.lang === "sub" ||
-            singleItem.lang === "both" ||
-            !singleItem.lang;
-          const hasDub =
-            singleItem.lang === "dub" || singleItem.lang === "both";
+        const targetEpisodes = singleItem
+          ? [singleItem]
+          : episodesOrChapters.filter((item) =>
+              selectedItems.has(Number(item.number)),
+            );
 
-          if (hasSub && hasDub) {
-            const result = await Swal.fire({
-              title: "Select Language",
-              text: `Choose language to download for Episode ${singleItem.number}`,
-              icon: "question",
-              showDenyButton: true,
-              showCancelButton: true,
-              confirmButtonText: "Download SUB",
-              denyButtonText: "Download DUB",
-              cancelButtonText: "Cancel",
-              background: "var(--bg-secondary)",
-              color: "var(--text-main)",
-              confirmButtonColor: "var(--accent)",
-              denyButtonColor: "var(--bg-tertiary)",
-            });
+        const hasSub =
+          targetEpisodes.some(
+            (ep) => ep.lang === "sub" || ep.lang === "both" || !ep.lang,
+          ) ||
+          details?.subOrDub === "both" ||
+          details?.subOrDub === "sub";
 
-            if (result.isDismissed && !result.isConfirmed && !result.isDenied) {
-              return; // user cancelled
-            }
+        const hasDub =
+          targetEpisodes.some(
+            (ep) => ep.lang === "dub" || ep.lang === "both",
+          ) ||
+          details?.subOrDub === "both" ||
+          details?.subOrDub === "dub";
 
-            chosenLang = result.isConfirmed ? "sub" : "dub";
-          } else if (hasDub) {
-            chosenLang = "dub";
-          } else {
-            chosenLang = "sub";
+        const hasHsub =
+          targetEpisodes.some((ep) => ep.hasHsub) ||
+          details?.subOrDub === "hsub";
+
+        const availableLangs = [];
+        if (hasSub) availableLangs.push("sub");
+        if (hasDub) availableLangs.push("dub");
+        if (hasHsub) availableLangs.push("hsub");
+
+        if (availableLangs.length > 1) {
+          const inputOptions = {};
+          if (hasSub) inputOptions.sub = "SUB";
+          if (hasDub) inputOptions.dub = "DUB";
+          if (hasHsub) inputOptions.hsub = "Hardsub (HSUB)";
+
+          const result = await Swal.fire({
+            title: "Select Version",
+            text: singleItem
+              ? `Choose the language version to download for Episode ${singleItem.number}:`
+              : `Choose the language version to download for the ${targetEpisodes.length} selected episodes:`,
+            input: "select",
+            inputOptions: inputOptions,
+            inputPlaceholder: "Select version",
+            showCancelButton: true,
+            background: "var(--bg-secondary)",
+            color: "var(--text-main)",
+            confirmButtonColor: "var(--accent)",
+          });
+
+          if (!result.value) {
+            return; // user cancelled
           }
+          chosenLang = result.value;
+        } else if (availableLangs.length === 1) {
+          chosenLang = availableLangs[0];
         } else {
-          // Bulk download
-          chosenLang = dubSelect;
+          chosenLang = "sub";
         }
       }
 
@@ -1687,7 +1706,8 @@ export default function InfoView({
     (item) => !isItemUnavailable(item),
   );
   const allSelectableSelected =
-    selectedItems.size >= totalItemsCount && totalItemsCount > 0;
+    selectableItems.length > 0 &&
+    selectableItems.every((item) => selectedItems.has(Number(item.number)));
 
   const numToDownload = Array.from(selectedItems).filter((num) => {
     const downloaded =
@@ -1783,16 +1803,16 @@ export default function InfoView({
                 className="btn-action-base btn-continue"
               >
                 <Play size={16} style={{ marginRight: "6px" }} />
-                {!hasAnyProgress
+                {isFinished
                   ? type === "Anime"
-                    ? "Watch from Episode 1"
-                    : "Read from Chapter 1"
-                  : isFinished
-                    ? type === "Anime"
-                      ? "Rewatch from Episode 1"
-                      : "Rewatch from Chapter 1"
-                    : type === "Anime"
-                      ? `Continue Watching Episode ${nextToPlay}`
+                    ? "Rewatch from Episode 1"
+                    : "Rewatch from Chapter 1"
+                  : type === "Anime"
+                    ? nextToPlay === 1
+                      ? "Start watching Episode 1"
+                      : `Continue Watching Episode ${nextToPlay}`
+                    : nextToPlay === 1
+                      ? "Start reading Chapter 1"
                       : `Continue Reading Chapter ${nextToPlay}`}
               </button>
 

@@ -257,6 +257,7 @@ router.post("/api/settings", async (req, res) => {
     subtitleFormat,
     malDiscordProfile,
     imageCacheSizeLimit,
+    developerMode,
   } = req.body;
   try {
     if (
@@ -292,6 +293,7 @@ router.post("/api/settings", async (req, res) => {
       subtitleFormat: subtitleFormat,
       malDiscordProfile: malDiscordProfile,
       imageCacheSizeLimit: imageCacheSizeLimit,
+      developerMode: developerMode,
     });
 
     res.status(200).json({ message: "Settings saved successfully." });
@@ -3096,6 +3098,7 @@ router.get("/api/history/list", async (req, res) => {
         w.last_watched AS date,
         a.image_url,
         a.provider,
+        a.MalID AS mal_id,
         CASE WHEN a.id IS NOT NULL THEN 1 ELSE 0 END AS exists_in_catalog,
         mal.totalEpisodes AS total_count
       FROM WatchHistory w
@@ -3128,6 +3131,7 @@ router.get("/api/history/list", async (req, res) => {
         r.last_read AS date,
         m.image_url,
         m.provider,
+        m.MalID AS mal_id,
         CASE WHEN m.id IS NOT NULL THEN 1 ELSE 0 END AS exists_in_catalog,
         mml.totalChapters AS total_count
       FROM ReadHistory r

@@ -20,7 +20,12 @@ import {
 } from "lucide-react";
 import Swal from "sweetalert2";
 
-export default function Catalog({ type, provider, onSelectMedia }) {
+export default function Catalog({
+  type,
+  provider,
+  onSelectMedia,
+  onTypeChange,
+}) {
   const lastRequestRef = useRef(null);
 
   const [data, setData] = useState({
@@ -200,7 +205,17 @@ export default function Catalog({ type, provider, onSelectMedia }) {
           hasNextPage: false,
         });
       } else if (resData?.error) {
-        setErrorMsg(resData.message || "Failed to fetch catalog.");
+        const lowerMsg = (resData.message || "").toLowerCase();
+        const isNoResultsError =
+          lowerMsg.includes("no anime found") ||
+          lowerMsg.includes("no manga found") ||
+          lowerMsg.includes("no results found");
+
+        if (!isNoResultsError) {
+          setErrorMsg(resData.message || "Failed to fetch catalog.");
+        } else {
+          setErrorMsg("");
+        }
         setData({
           results: [],
           totalPages: 0,
@@ -277,12 +292,34 @@ export default function Catalog({ type, provider, onSelectMedia }) {
         .then((res) => res.json())
         .then((hData) => {
           const filtered = (hData || []).filter((item) => item.type === type);
-          const seen = new Set();
-          const unique = [];
+          const getGroupKey = (item) => {
+            if (item.mal_id) {
+              return `mal_${item.mal_id}`;
+            }
+            const cleanTitle = (item.title || "")
+              .toLowerCase()
+              .replace(/[^a-z0-9]/g, "");
+            return `title_${cleanTitle}`;
+          };
+
+          const grouped = {};
           for (const item of filtered) {
-            if (!seen.has(item.media_id)) {
-              seen.add(item.media_id);
-              unique.push(item);
+            const key = getGroupKey(item);
+            const currentNum = Number(item.number) || 0;
+            if (
+              !grouped[key] ||
+              currentNum > (Number(grouped[key].number) || 0)
+            ) {
+              grouped[key] = item;
+            }
+          }
+          const unique = [];
+          const added = new Set();
+          for (const item of filtered) {
+            const key = getGroupKey(item);
+            if (!added.has(key)) {
+              added.add(key);
+              unique.push(grouped[key]);
             }
           }
           setRecentHistory(unique);
@@ -550,30 +587,64 @@ export default function Catalog({ type, provider, onSelectMedia }) {
 
   return (
     <div className="catalog-wrapper">
-      <header className="catalog-header">
-        <h1 className="catalog-title">
+      <header
+        className="catalog-header"
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          width: "100%",
+          gap: "16px",
+        }}
+      >
+        <h1 className="catalog-title" style={{ margin: 0 }}>
           {provider === "local"
-            ? `Local ${type}`
+            ? "Home"
             : provider === "mal"
-              ? `MyAnimeList ${type}`
-              : `Discover ${type}`}
+              ? `MyAnimeList`
+              : "Discover"}
         </h1>
 
-        {/* Search bar for non-local searches, or when linking a MAL title */}
-        {((provider !== "local" && provider !== "mal") || linkingMalItem) && (
-          <form onSubmit={handleSearchSubmit} className="search-form">
-            <input
-              type="text"
-              placeholder={`Search ${type}...`}
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="search-input"
-            />
-            <button type="submit" className="btn-search">
-              <Search size={18} />
-            </button>
-          </form>
-        )}
+        <div
+          className="search-middle-container"
+          style={{ flex: 1, display: "flex", justifyContent: "center" }}
+        >
+          {((provider !== "local" && provider !== "mal") || linkingMalItem) && (
+            <form
+              onSubmit={handleSearchSubmit}
+              className="search-form"
+              style={{ margin: "0 auto" }}
+            >
+              <input
+                type="text"
+                placeholder={`Search ${type}...`}
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="search-input"
+              />
+              <button type="submit" className="btn-search">
+                <Search size={18} />
+              </button>
+            </form>
+          )}
+        </div>
+
+        <div className="market-tabs-wrapper" style={{ flexShrink: 0 }}>
+          <button
+            type="button"
+            onClick={() => onTypeChange && onTypeChange("Anime")}
+            className={`market-tab-btn ${type === "Anime" ? "active" : ""}`}
+          >
+            Anime
+          </button>
+          <button
+            type="button"
+            onClick={() => onTypeChange && onTypeChange("Manga")}
+            className={`market-tab-btn ${type === "Manga" ? "active" : ""}`}
+          >
+            Manga
+          </button>
+        </div>
       </header>
 
       {/* Local Library Stats Dashboard */}
@@ -599,7 +670,7 @@ export default function Catalog({ type, provider, onSelectMedia }) {
             </div>
             <div className="stat-content">
               <span className="stat-label">
-                {type === "Anime" ? "Episodes Completed" : "Chapters Read"}
+                {type === "Anime" ? "Episodes Watched" : "Chapters Read"}
               </span>
               <span className="stat-value">
                 {type === "Anime"

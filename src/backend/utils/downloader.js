@@ -659,9 +659,14 @@ class downloader {
             if (parsedExt) ext = parsedExt;
           } catch (e) {}
 
-          const subtitlePath = path.join(
+          let finalExt = ext;
+          if (finalExt === "vtt" && this.ChangeTosrt) {
+            finalExt = "srt";
+          }
+
+          let subtitlePath = path.join(
             SubTitleDir,
-            `${this.Epnum}Ep.${normalizedLang}.${ext === "vtt" ? "srt" : ext}`,
+            `${this.Epnum}Ep.${normalizedLang}.${finalExt}`,
           );
 
           if (fs.existsSync(subtitlePath)) {
@@ -692,8 +697,28 @@ class downloader {
             subtitleData = await got(targetUrl).text();
           }
 
-          if (ext === "vtt" || subtitleData.trim().startsWith("WEBVTT")) {
-            subtitleData = this.convertToSRT(subtitleData);
+          const isVtt =
+            finalExt === "vtt" || subtitleData.trim().startsWith("WEBVTT");
+
+          if (isVtt) {
+            if (this.ChangeTosrt) {
+              subtitleData = this.convertToSRT(subtitleData);
+              if (finalExt !== "srt") {
+                finalExt = "srt";
+                subtitlePath = path.join(
+                  SubTitleDir,
+                  `${this.Epnum}Ep.${normalizedLang}.${finalExt}`,
+                );
+              }
+            } else {
+              if (finalExt !== "vtt") {
+                finalExt = "vtt";
+                subtitlePath = path.join(
+                  SubTitleDir,
+                  `${this.Epnum}Ep.${normalizedLang}.${finalExt}`,
+                );
+              }
+            }
           }
 
           await fs.promises.writeFile(subtitlePath, subtitleData, "utf8");
@@ -718,14 +743,12 @@ class downloader {
     }
   }
 
-  // Convert To Srt
   convertToSRT(content) {
     try {
       const lines = content.split(/\r?\n/);
       const srtLines = [];
       let index = 1;
       let buffer = [];
-      let lastEnd = 0;
 
       const timeRegex =
         /^(\d{2}:)?\d{2}:\d{2}[\.,]\d{3} --> (\d{2}:)?\d{2}:\d{2}[\.,]\d{3}$/;
@@ -733,7 +756,17 @@ class downloader {
       for (let i = 0; i < lines.length; i++) {
         let line = lines[i].trim().replace(/<[^>]+>/g, "");
 
-        if (!line || line.startsWith("WEBVTT")) continue;
+        if (line.startsWith("WEBVTT")) continue;
+
+        if (!line) {
+          if (buffer.length) {
+            srtLines.push(String(index++));
+            srtLines.push(...buffer);
+            srtLines.push("");
+            buffer = [];
+          }
+          continue;
+        }
 
         if (timeRegex.test(line)) {
           if (buffer.length) {
@@ -747,14 +780,16 @@ class downloader {
           const startMs = this.toMs(start);
           const endMs = this.toMs(end);
 
-          const adjustedStart = Math.max(startMs, lastEnd + 1);
-          if (endMs <= adjustedStart) continue;
+          if (endMs <= startMs) continue;
 
-          lastEnd = endMs;
-
-          buffer.push(`${this.toSRT(adjustedStart)} --> ${this.toSRT(endMs)}`);
-        } else if (buffer.length) {
-          buffer.push(line);
+          buffer.push(`${this.toSRT(startMs)} --> ${this.toSRT(endMs)}`);
+        } else {
+          if (/^\d+$/.test(line) && buffer.length === 0) {
+            continue;
+          }
+          if (buffer.length) {
+            buffer.push(line);
+          }
         }
       }
 
@@ -967,4 +1002,4 @@ async function download(args) {
   }
 }
 
-module.exports = { download, getFfmpegPath, stripPngHeader };
+module.exports = { download, getFfmpegPath, stripPngHeader, downloader };

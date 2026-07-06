@@ -18,23 +18,32 @@ export default function Sidebar({
   setView,
   isCollapsed,
   toggleCollapse,
+  developerMode = "off",
   onOpenWatchTogether,
 }) {
   const menuItems = [
-    { id: "local-anime", label: "Local Anime", icon: Library },
-    { id: "local-manga", label: "Local Manga", icon: FolderMinus },
-    { id: "anime-catalog", label: "Discover Anime", icon: Play },
-    { id: "manga-catalog", label: "Discover Manga", icon: BookOpen },
+    { id: "home", label: "Home", icon: Library },
+    { id: "discover", label: "Discover", icon: Play },
     {
       id: "watch-together",
       label: "Watch Together",
       icon: Users,
     },
     { id: "downloads", label: "Downloads", icon: Download },
+    { id: "marketplace", label: "Extensions", icon: ShoppingBag },
     { id: "logs", label: "Logs", icon: Terminal },
     { id: "settings", label: "Settings", icon: Settings },
-    { id: "marketplace", label: "Marketplace", icon: ShoppingBag },
   ];
+
+  const filteredMenuItems = menuItems.filter((item) => {
+    if (item.id === "logs") {
+      return developerMode === "on";
+    }
+    return true;
+  });
+
+  const settingsItem = filteredMenuItems.find((item) => item.id === "settings");
+  const mainItems = filteredMenuItems.filter((item) => item.id !== "settings");
 
   return (
     <aside className={`sidebar ${isCollapsed ? "collapsed" : ""}`}>
@@ -59,12 +68,9 @@ export default function Sidebar({
       </div>
 
       <nav className="sidebar-nav">
-        {menuItems.map((item) => {
+        {mainItems.map((item) => {
           const Icon = item.icon;
-          const isActive =
-            currentView === item.id ||
-            (item.id === "anime-catalog" && currentView === "anime-search") ||
-            (item.id === "manga-catalog" && currentView === "manga-search");
+          const isActive = currentView === item.id;
 
           return (
             <button
@@ -85,6 +91,33 @@ export default function Sidebar({
           );
         })}
       </nav>
+
+      {settingsItem &&
+        (() => {
+          const Icon = settingsItem.icon;
+          const isActive = currentView === settingsItem.id;
+          return (
+            <div
+              className="sidebar-footer"
+              style={{
+                padding: "16px 8px",
+                borderTop: "1px solid var(--border)",
+                display: "flex",
+                flexDirection: "column",
+                gap: "8px",
+              }}
+            >
+              <button
+                onClick={() => setView(settingsItem.id)}
+                className={`sidebar-item ${isActive ? "active" : ""}`}
+                title={isCollapsed ? settingsItem.label : undefined}
+              >
+                <Icon size={20} color={isActive ? "#a78bfa" : "#9ca3af"} />
+                {!isCollapsed && <span>{settingsItem.label}</span>}
+              </button>
+            </div>
+          );
+        })()}
     </aside>
   );
 }

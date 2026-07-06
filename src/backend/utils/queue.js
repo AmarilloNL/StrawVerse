@@ -344,11 +344,16 @@ async function downloadEpisodeByQuality(
     }
 
     if (selectedSource) {
+      const dlQuality =
+        selectedSource.quality && selectedSource.quality.match(/\d+p/)
+          ? selectedSource.quality
+          : config?.quality || "1080p";
+
       await downloadVideo(
         selectedSource.url,
         directoryName,
         episodeNumber,
-        selectedSource.quality,
+        dlQuality,
         Title,
         epid,
         subdub === "hsub" ? [] : (sourcesArray?.subtitles ?? []),
@@ -357,7 +362,7 @@ async function downloadEpisodeByQuality(
           : config?.mergeSubtitles === "on"
             ? true
             : false,
-        (config?.subtitleFormat ?? "ttv") === "srt",
+        (config?.subtitleFormat ?? "vtt") === "srt",
         selectedSource.headers ?? {},
       );
     } else {

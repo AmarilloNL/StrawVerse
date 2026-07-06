@@ -24,7 +24,7 @@
   transition: var(--transition);
 }
 .sidebar.collapsed .sidebar-header {
-  height: 90px;
+  height: 96px;
   flex-direction: column;
   justify-content: center;
   padding: 12px 0;
@@ -37,6 +37,7 @@
   gap: 12px;
   overflow: hidden;
   white-space: nowrap;
+  flex-shrink: 0;
 }
 .sidebar.collapsed .sidebar-logo-wrapper {
   justify-content: center;
@@ -52,7 +53,7 @@
 }
 
 .sidebar-logo-text {
-  font-family: 'Outfit', sans-serif;
+  font-family: "Outfit", sans-serif;
   font-size: 20px;
   font-weight: 800;
   letter-spacing: 0.5px;

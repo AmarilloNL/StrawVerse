@@ -1,14 +1,20 @@
 /* eslint-disable react-hooks/set-state-in-effect, react-hooks/exhaustive-deps */
-import { useState, useEffect } from 'react';
-import { Loader2, Download, ShieldAlert } from 'lucide-react';
-import Swal from 'sweetalert2';
-import './css/Marketplace.css';
+import { useState, useEffect } from "react";
+import { Loader2, Download, ShieldAlert } from "lucide-react";
+import Swal from "sweetalert2";
+import "./css/Marketplace.css";
 
 export default function Marketplace({ initialType }) {
-  const [activeType, setActiveType] = useState(initialType || 'Anime');
+  const [activeType, setActiveType] = useState(initialType || "Anime");
   const [extensions, setExtensions] = useState([]);
-  const [installedProviders, setInstalledProviders] = useState({ Anime: [], Manga: [] });
-  const [installedVersions, setInstalledVersions] = useState({ Anime: [], Manga: [] });
+  const [installedProviders, setInstalledProviders] = useState({
+    Anime: [],
+    Manga: [],
+  });
+  const [installedVersions, setInstalledVersions] = useState({
+    Anime: [],
+    Manga: [],
+  });
   const [loading, setLoading] = useState(true);
   const [processingId, setProcessingId] = useState(null);
 
@@ -17,16 +23,20 @@ export default function Marketplace({ initialType }) {
     try {
       // 1. Fetch online scrapers from repository
       const response = await fetch(
-        'https://raw.githubusercontent.com/TheYogMehta/extensions/refs/heads/main/marketplace.json'
+        "https://raw.githubusercontent.com/TheYogMehta/extensions/refs/heads/main/marketplace.json",
       );
       const data = await response.json();
       setExtensions(data[activeType] || []);
 
       // 2. Fetch locally installed scrapers from our Express settings
-      const settingsRes = await fetch('/api/settings');
+      const settingsRes = await fetch("/api/settings");
       const settingsData = await settingsRes.json();
-      setInstalledProviders(settingsData.settings?.providers || { Anime: [], Manga: [] });
-      setInstalledVersions(settingsData.settings?.installedExtensions || { Anime: [], Manga: [] });
+      setInstalledProviders(
+        settingsData.settings?.providers || { Anime: [], Manga: [] },
+      );
+      setInstalledVersions(
+        settingsData.settings?.installedExtensions || { Anime: [], Manga: [] },
+      );
     } catch (err) {
       console.error(err);
     } finally {
@@ -40,8 +50,8 @@ export default function Marketplace({ initialType }) {
 
   const isUpdateAvailable = (current, required) => {
     if (!current || !required) return false;
-    const curr = current.split('.').map(Number);
-    const req = required.split('.').map(Number);
+    const curr = current.split(".").map(Number);
+    const req = required.split(".").map(Number);
     for (let i = 0; i < Math.max(curr.length, req.length); i++) {
       const c = curr[i] || 0;
       const r = req[i] || 0;
@@ -53,59 +63,63 @@ export default function Marketplace({ initialType }) {
 
   const getInstalledVersion = (name) => {
     const list = installedVersions[activeType] || [];
-    const item = list.find(ext => ext.name === name);
+    const item = list.find((ext) => ext.name === name);
     return item ? item.version : null;
   };
 
   const handleAction = async (taskType, providerName) => {
-    if (taskType === 'remove') {
+    if (taskType === "remove") {
       const confirmResult = await Swal.fire({
-        title: 'Are you sure?',
+        title: "Are you sure?",
         text: `Do you want to remove the ${providerName} scraper?`,
-        icon: 'warning',
+        icon: "warning",
         showCancelButton: true,
-        confirmButtonText: 'Yes, remove it',
-        cancelButtonText: 'Cancel',
-        background: 'var(--bg-secondary)',
-        color: 'var(--text-main)',
-        confirmButtonColor: 'var(--danger)',
-        cancelButtonColor: 'var(--bg-tertiary)',
+        confirmButtonText: "Yes, remove it",
+        cancelButtonText: "Cancel",
+        background: "var(--bg-secondary)",
+        color: "var(--text-main)",
+        confirmButtonColor: "var(--danger)",
+        cancelButtonColor: "var(--bg-tertiary)",
       });
       if (!confirmResult.isConfirmed) return;
     }
 
     setProcessingId(providerName);
     try {
-      const res = await window.sharedStateAPI.extensions(taskType, activeType, providerName);
-      if (res && res.type === 'success') {
+      const res = await window.sharedStateAPI.extensions(
+        taskType,
+        activeType,
+        providerName,
+      );
+      if (res && res.type === "success") {
         Swal.fire({
-          title: 'Success',
+          title: "Success",
           text: res.msg || `${providerName} was updated successfully.`,
-          icon: 'success',
-          background: 'var(--bg-secondary)',
-          color: 'var(--text-main)',
-          confirmButtonColor: 'var(--accent)',
+          icon: "success",
+          background: "var(--bg-secondary)",
+          color: "var(--text-main)",
+          confirmButtonColor: "var(--accent)",
         });
         fetchMarketplace();
       } else {
         Swal.fire({
-          title: 'Error',
-          text: res?.msg || 'Error performing scraper task.',
-          icon: 'error',
-          background: 'var(--bg-secondary)',
-          color: 'var(--text-main)',
-          confirmButtonColor: 'var(--accent)',
+          title: "Error",
+          text: res?.msg || "Error performing scraper task.",
+          icon: "error",
+          background: "var(--bg-secondary)",
+          color: "var(--text-main)",
+          confirmButtonColor: "var(--accent)",
         });
       }
     } catch (err) {
       console.error(err);
       Swal.fire({
-        title: 'Installation Failed',
-        text: err.message || 'Scraper installation failed.',
-        icon: 'error',
-        background: 'var(--bg-secondary)',
-        color: 'var(--text-main)',
-        confirmButtonColor: 'var(--accent)',
+        title: "Installation Failed",
+        text: err.message || "Scraper installation failed.",
+        icon: "error",
+        background: "var(--bg-secondary)",
+        color: "var(--text-main)",
+        confirmButtonColor: "var(--accent)",
       });
     } finally {
       setProcessingId(null);
@@ -124,21 +138,24 @@ export default function Marketplace({ initialType }) {
     <div className="market-wrapper">
       <header className="market-header">
         <div>
-          <h1 className="market-title">Scraper Marketplace</h1>
-          <p className="market-subtitle">Install, update, or remove extensions for anime & manga content streaming.</p>
+          <h1 className="market-title">Scraper Extensions</h1>
+          <p className="market-subtitle">
+            Install, update, or remove extensions for anime & manga content
+            streaming.
+          </p>
         </div>
 
         {/* Anime / Manga Tab Selectors */}
         <div className="market-tabs-wrapper">
           <button
-            onClick={() => setActiveType('Anime')}
-            className={`market-tab-btn ${activeType === 'Anime' ? 'active' : ''}`}
+            onClick={() => setActiveType("Anime")}
+            className={`market-tab-btn ${activeType === "Anime" ? "active" : ""}`}
           >
             Anime Scrapers
           </button>
           <button
-            onClick={() => setActiveType('Manga')}
-            className={`market-tab-btn ${activeType === 'Manga' ? 'active' : ''}`}
+            onClick={() => setActiveType("Manga")}
+            className={`market-tab-btn ${activeType === "Manga" ? "active" : ""}`}
           >
             Manga Scrapers
           </button>
@@ -157,7 +174,9 @@ export default function Marketplace({ initialType }) {
             const isProcessing = processingId === provider.name;
             const logoUrl = `https://raw.githubusercontent.com/TheYogMehta/extensions/refs/heads/main/ico/${provider.name}.ico`;
             const installedVer = getInstalledVersion(provider.name);
-            const hasUpdate = installedVer ? isUpdateAvailable(installedVer, provider.version) : false;
+            const hasUpdate = installedVer
+              ? isUpdateAvailable(installedVer, provider.version)
+              : false;
 
             return (
               <div key={provider.name} className="market-card glass-panel">
@@ -167,7 +186,9 @@ export default function Marketplace({ initialType }) {
                       src={logoUrl}
                       alt={provider.name}
                       className="market-logo"
-                      onError={(e) => { e.target.src = '/images/image-404.png'; }}
+                      onError={(e) => {
+                        e.target.src = "/images/image-404.png";
+                      }}
                     />
                   </div>
                   <div>
@@ -193,7 +214,7 @@ export default function Marketplace({ initialType }) {
                     <>
                       {hasUpdate ? (
                         <button
-                          onClick={() => handleAction('add', provider.name)}
+                          onClick={() => handleAction("add", provider.name)}
                           className="btn-update"
                           disabled={provider.disabled}
                           title={`New version v${provider.version} available!`}
@@ -202,7 +223,7 @@ export default function Marketplace({ initialType }) {
                         </button>
                       ) : (
                         <button
-                          onClick={() => handleAction('add', provider.name)}
+                          onClick={() => handleAction("add", provider.name)}
                           className="btn-reinstall"
                           disabled={provider.disabled}
                           title="Reinstall current version"
@@ -210,13 +231,16 @@ export default function Marketplace({ initialType }) {
                           Reinstall
                         </button>
                       )}
-                      <button onClick={() => handleAction('remove', provider.name)} className="btn-remove">
+                      <button
+                        onClick={() => handleAction("remove", provider.name)}
+                        className="btn-remove"
+                      >
                         Remove
                       </button>
                     </>
                   ) : (
                     <button
-                      onClick={() => handleAction('add', provider.name)}
+                      onClick={() => handleAction("add", provider.name)}
                       className="btn-install"
                       disabled={provider.disabled}
                     >

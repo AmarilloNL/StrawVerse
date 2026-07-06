@@ -41,6 +41,7 @@ async function settingupdate({
   subtitleFormat = null,
   malDiscordProfile = null,
   imageCacheSizeLimit = null,
+  developerMode = null,
 }) {
   const currentSettings = getKeyValue("Settings", "config");
 
@@ -103,6 +104,10 @@ async function settingupdate({
     imageCacheSizeLimit = currentSettings?.imageCacheSizeLimit ?? 5;
   }
 
+  if (developerMode === null) {
+    developerMode = currentSettings?.developerMode || "off";
+  }
+
   config.quality = quality;
   config.mal_on_off = mal_on_off;
   config.status = status;
@@ -117,6 +122,7 @@ async function settingupdate({
   config.subtitleFormat = subtitleFormat;
   config.malDiscordProfile = malDiscordProfile;
   config.imageCacheSizeLimit = imageCacheSizeLimit;
+  config.developerMode = developerMode;
 
   if (config.enableDiscordRPC === "on") {
     try {
@@ -216,6 +222,11 @@ async function settingfetch() {
       changes = true;
     }
 
+    if (!config?.hasOwnProperty("developerMode")) {
+      config.developerMode = "off";
+      changes = true;
+    }
+
     if (changes) {
       await settingSave();
     }
@@ -250,10 +261,15 @@ async function SettingsLoad() {
             subtitleFormat: "vtt",
             malDiscordProfile: "off",
             imageCacheSizeLimit: 5,
+            developerMode: "off",
           };
 
     if (config && !config.hasOwnProperty("imageCacheSizeLimit")) {
       config.imageCacheSizeLimit = 5;
+    }
+
+    if (config && !config.hasOwnProperty("developerMode")) {
+      config.developerMode = "off";
     }
 
     const currentVersion = app.getVersion();
