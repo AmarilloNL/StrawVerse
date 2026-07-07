@@ -89,7 +89,7 @@ global.setFallbackReferer = (referer) => {
   saveStreamReferer("__fallback__", referer);
 };
 
-function getHeaders(url) {
+function getHeaders(url, method = "GET") {
   const chromeVer = process.versions.chrome || "148.0.7778.218";
   let userAgent = `Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${chromeVer} Safari/537.36`;
   if (process.platform === "linux") {
@@ -212,7 +212,8 @@ function getHeaders(url) {
     }
   }
 
-  if (headers.Referer) {
+  const reqMethod = String(method).toUpperCase();
+  if (headers.Referer && reqMethod !== "GET" && reqMethod !== "HEAD") {
     try {
       const refUrl = new URL(headers.Referer);
       if (refUrl.protocol === "http:" || refUrl.protocol === "https:") {

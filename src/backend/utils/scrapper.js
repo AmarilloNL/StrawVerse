@@ -663,7 +663,7 @@ axios.defaults.proxy = false;
 global.axios = axios.create({ proxy: false, adapter: electronNetAdapter });
 global.axios.interceptors.request.use(
   async (config) => {
-    const headers = getHeaders(config.url);
+    const headers = getHeaders(config.url, config.method);
     if (config.headers) {
       if (headers["User-Agent"]) {
         takeHeaderCaseInsensitive(config.headers, "user-agent");
@@ -711,7 +711,7 @@ global.axios.interceptors.response.use(
       return global
         .cloudflarebypass(response.config.url, true, referer)
         .then(() => {
-          const newHeaders = getHeaders(response.config.url);
+          const newHeaders = getHeaders(response.config.url, response.config.method);
           response.config.headers = {
             ...response.config.headers,
             ...newHeaders,
@@ -742,7 +742,7 @@ global.axios.interceptors.response.use(
           (config.headers?.get && config.headers.get("referer")) ||
           "";
         await global.cloudflarebypass(config.url, true, referer);
-        const newHeaders = getHeaders(config.url);
+        const newHeaders = getHeaders(config.url, config.method);
         config.headers = {
           ...config.headers,
           ...newHeaders,

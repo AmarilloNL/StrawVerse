@@ -79,11 +79,23 @@ async function checkForMappingUpdates() {
   const storedTag = getKeyValue("Settings", mappingTagKey);
 
   logger.info("[mappingUpdater] Checking for mapping database updates...");
+  let lastId = 0;
+  try {
+    if (global.mappingDb) {
+      const row = global.mappingDb
+        .prepare("SELECT MAX(id) as maxId FROM mapping_changelog")
+        .get();
+      if (row && typeof row.maxId === "number") {
+        lastId = row.maxId;
+      }
+    }
+  } catch (e) {}
+
   let updateResponse = null;
   try {
     const url = storedTag
-      ? `https://mapper.theyogmehta.online/api/mapping/updates?version=${storedTag}`
-      : "https://mapper.theyogmehta.online/api/mapping/updates";
+      ? `https://mapper.theyogmehta.online/api/mapping/updates?version=${storedTag}&last_id=${lastId}`
+      : `https://mapper.theyogmehta.online/api/mapping/updates?last_id=${lastId}`;
     const response = await axios.get(url, { responseType: "arraybuffer" });
     const buffer = Buffer.from(response.data);
     updateResponse = deserializeDelta(buffer);
