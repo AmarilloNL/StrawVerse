@@ -47,7 +47,8 @@ async function checkForMappingUpdates() {
   const missingTables =
     !tableExists("anime") ||
     !tableExists("animepahe") ||
-    !tableExists("anikototv");
+    !tableExists("anikototv") ||
+    !tableExists("anineko");
 
   if (needsUpdate || missingTables) {
     if (needsUpdate) {

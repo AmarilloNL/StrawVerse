@@ -606,10 +606,12 @@ router.post("/api/info/:AnimeManga/:LocalMalProvider", async (req, res) => {
                 SELECT malid, 'pahe' AS provider FROM animepahe WHERE id = ? OR uuid = ?
                 UNION
                 SELECT malid, 'anikoto' AS provider FROM anikototv WHERE id = ?
+                UNION
+                SELECT malid, 'anineko' AS provider FROM anineko WHERE id = ?
                 LIMIT 1
               `,
               )
-              .get(cleanId, cleanId, cleanId);
+              .get(cleanId, cleanId, cleanId, cleanId);
             if (row) {
               resolvedMalId = row.malid;
               resolvedProvider = row.provider;
@@ -619,11 +621,14 @@ router.post("/api/info/:AnimeManga/:LocalMalProvider", async (req, res) => {
         }
 
         if (resolvedMalId) {
-          const currentAnimeProvider = (setting.Animeprovider || "pahe")
-            .toLowerCase()
-            .includes("anikoto")
+          const settingProviderLower = (
+            setting.Animeprovider || "pahe"
+          ).toLowerCase();
+          const currentAnimeProvider = settingProviderLower.includes("anikoto")
             ? "anikoto"
-            : "pahe";
+            : settingProviderLower.includes("anineko")
+              ? "anineko"
+              : "pahe";
           if (currentAnimeProvider !== resolvedProvider) {
             if (currentAnimeProvider === "pahe") {
               try {
@@ -645,6 +650,16 @@ router.post("/api/info/:AnimeManga/:LocalMalProvider", async (req, res) => {
                 if (targetRow) {
                   resolvedId = targetRow.id;
                   resolvedProvider = "anikoto";
+                }
+              } catch (err2) {}
+            } else if (currentAnimeProvider === "anineko") {
+              try {
+                const targetRow = global.mappingDb
+                  .prepare("SELECT id FROM anineko WHERE malid = ? LIMIT 1")
+                  .get(resolvedMalId);
+                if (targetRow) {
+                  resolvedId = targetRow.id;
+                  resolvedProvider = "anineko";
                 }
               } catch (err2) {}
             }
@@ -935,10 +950,12 @@ router.post("/api/info/:AnimeManga/:LocalMalProvider", async (req, res) => {
                 ? AS malid,
                 p.uuid AS pahe_uuid,
                 a.id AS anikoto_id,
+                neko.id AS anineko_id,
                 an.livechart_id
               FROM (SELECT ? AS malid) rm
               LEFT JOIN animepahe p ON p.malid = rm.malid
               LEFT JOIN anikototv a ON a.malid = rm.malid
+              LEFT JOIN anineko neko ON neko.malid = rm.malid
               LEFT JOIN anime an ON an.malid = rm.malid
               LIMIT 1
             `;
@@ -962,20 +979,24 @@ router.post("/api/info/:AnimeManga/:LocalMalProvider", async (req, res) => {
               SELECT malid FROM animepahe WHERE id = ? OR uuid = ?
               UNION ALL
               SELECT malid FROM anikototv WHERE id = ?
+              UNION ALL
+              SELECT malid FROM anineko WHERE id = ?
             )
             SELECT 
               rm.malid,
               p.uuid AS pahe_uuid,
               a.id AS anikoto_id,
+              neko.id AS anineko_id,
               an.livechart_id
             FROM (SELECT malid FROM resolved WHERE malid IS NOT NULL LIMIT 1) rm
             LEFT JOIN animepahe p ON p.malid = rm.malid
             LEFT JOIN anikototv a ON a.malid = rm.malid
+            LEFT JOIN anineko neko ON neko.malid = rm.malid
             LEFT JOIN anime an ON an.malid = rm.malid
           `;
           mappingRow = global.mappingDb
             .prepare(query)
-            .get(cleanId, cleanId, cleanId);
+            .get(cleanId, cleanId, cleanId, cleanId);
 
           if (mappingRow && mappingRow.malid) {
             data.malid = parseInt(mappingRow.malid);
@@ -1027,6 +1048,15 @@ router.post("/api/info/:AnimeManga/:LocalMalProvider", async (req, res) => {
               linkedProvidersMap["anikoto"] = {
                 id: mappingRow.anikoto_id,
                 provider: "anikoto",
+                title: data.title || "",
+                folder_name: null,
+              };
+            }
+
+            if (mappingRow.anineko_id && !linkedProvidersMap["anineko"]) {
+              linkedProvidersMap["anineko"] = {
+                id: mappingRow.anineko_id,
+                provider: "anineko",
                 title: data.title || "",
                 folder_name: null,
               };
@@ -1890,6 +1920,11 @@ router.post("/api/local/tags/add", async (req, res) => {
             {
               key: "anikoto",
               query: "SELECT malid FROM anikototv WHERE id = ?",
+              params: [id],
+            },
+            {
+              key: "anineko",
+              query: "SELECT malid FROM anineko WHERE id = ?",
               params: [id],
             },
           ].find((r) => (provider || "").toLowerCase().includes(r.key));

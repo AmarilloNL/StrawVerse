@@ -89,6 +89,10 @@ async function MetadataAdd(type, valuesToAdd) {
           match = global.mappingDb
             .prepare("SELECT malid FROM anikototv WHERE id = ? LIMIT 1")
             .get(cleanId);
+        } else if (providerName.includes("anineko")) {
+          match = global.mappingDb
+            .prepare("SELECT malid FROM anineko WHERE id = ? LIMIT 1")
+            .get(cleanId);
         }
         if (match?.malid) {
           valuesToAdd.MalID = String(match.malid);

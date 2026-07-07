@@ -122,7 +122,12 @@ async function MalRefreshTokenGen(json) {
         isExpired = true;
       }
     } else if (JsonToken.created_at) {
-      if (now >= JsonToken.created_at + (JsonToken.expires_in || 2678400) * 1000 - 5 * 60 * 1000) {
+      if (
+        now >=
+        JsonToken.created_at +
+          (JsonToken.expires_in || 2678400) * 1000 -
+          5 * 60 * 1000
+      ) {
         isExpired = true;
       }
     } else {
@@ -131,7 +136,9 @@ async function MalRefreshTokenGen(json) {
     }
 
     if (isExpired) {
-      logger.info("🔄 MAL Token expired or missing expiration timestamp. Refreshing...");
+      logger.info(
+        "🔄 MAL Token expired or missing expiration timestamp. Refreshing...",
+      );
 
       const { data } = await axios.post(
         "https://myanimelist.net/v1/oauth2/token",
@@ -290,7 +297,9 @@ async function MalAddToList(type = "anime", malid, status, numVal = 0) {
 // Sync A Specific Type (Anime or Manga)
 async function MalSyncType(type, force = false) {
   if (!global.MalLoggedIn || !MalAcount?.access_token) {
-    logger.info(`[MAL-${type.toUpperCase()}-LIST] SKIPPED FETCH (Not logged in)`);
+    logger.info(
+      `[MAL-${type.toUpperCase()}-LIST] SKIPPED FETCH (Not logged in)`,
+    );
     return;
   }
 
@@ -426,7 +435,9 @@ async function MalFetchList(type = "anime", page = 1, limit = 100) {
       results: list,
     };
   } catch (err) {
-    logger.error(`[MAL-LIST] Failed To Fetch ${type} Page : ${page} - ${err.message}`);
+    logger.error(
+      `[MAL-LIST] Failed To Fetch ${type} Page : ${page} - ${err.message}`,
+    );
     return {
       hasNextPage: false,
       results: [],
@@ -511,10 +522,12 @@ async function autoTrackMAL(type, mediaId, number) {
             SELECT malid FROM animepahe WHERE id = ? OR uuid = ?
             UNION
             SELECT malid FROM anikototv WHERE id = ?
+            UNION
+            SELECT malid FROM anineko WHERE id = ?
             LIMIT 1
           `,
           )
-          .get(strippedId, strippedId, strippedId);
+          .get(strippedId, strippedId, strippedId, strippedId);
         if (row?.malid) {
           malid = parseInt(row.malid);
         }
