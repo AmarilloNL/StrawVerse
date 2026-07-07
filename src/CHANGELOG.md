@@ -1,5 +1,21 @@
 # Changelog
 
+# [7.4.2] - 2026-07-07
+
+### Bug Fixes
+
+- **Anikoto Subtitles**: Fixed subtitle download and extraction failing for Anikoto sources.
+- **AnimePahe Cookie Headers**: Fixed cookie headers not being sent correctly in AnimePahe scraper requests.
+- **Duplicate Download Folder Names**: Fixed download titles appending a redundant SubDub suffix when the title already ends with it.
+- **Download Performance Lag**: Throttled download progress updates to a maximum of once per 500ms, preventing an IPC message flood that caused severe frontend UI lag during downloads.
+- **Merged Subtitles Local Playback**: Fixed subtitles not playing in the internal player for local files when `mergeSubtitles` is enabled. Added on-the-fly subtitle extraction from the video file container.
+
+### Improvements
+
+- **Anineko Mapping**: Added Anineko as a new provider mapping source.
+  **Auto Library Tagging**: Starting a download now automatically adds the title to your library as "Downloads" if it wasn't already added.
+- **Smart Tag Cleanup**: If all downloaded files are deleted and nothing is queued, the library tag automatically reverts back to "None".
+
 # [7.4.1] - 2026-07-06
 
 ### Centralized Mapping Synchronization
@@ -10,7 +26,6 @@
 ### Scraper & Network Patches
 
 - **Case-Insensitive Request Headers**: Scraper utilities and Axios request interceptors now handle headers case-insensitively to prevent duplicates (`Referer`, `Origin`, `User-Agent`, `Cookie`), fixing request errors with AnimePahe.
-
 
 # [7.4.0] - 2026-07-06
 
