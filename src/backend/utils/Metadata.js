@@ -3,6 +3,8 @@ const { logger } = require("./AppLogger");
 const axios = require("axios");
 const path = require("path");
 const fs = require("fs");
+const child_process = require("child_process");
+const { getFfmpegPath } = require("./downloader");
 const { tables, exec, queryAll, queryOne, run } = require("./db");
 const { getHeaders } = require("./proxyHeaders");
 const ImageCacheManager = require("./ImageCacheManager");
@@ -854,6 +856,63 @@ async function FetchLocalProviderInfo(type, id) {
   }
 }
 
+async function extractSubtitlesFromVideo(videoPath, epNum) {
+  try {
+    const ffmpegPath = await getFfmpegPath();
+    if (!ffmpegPath) return [];
+
+    const parentDir = path.dirname(videoPath);
+    const subsDir = path.join(parentDir, "subs");
+
+    return new Promise((resolve) => {
+      child_process.exec(`"${ffmpegPath}" -i "${videoPath}"`, (err, stdout, stderr) => {
+        const output = stderr || stdout || "";
+        const streamLines = output.split("\n").filter(line => line.includes("Subtitle:"));
+        if (streamLines.length === 0) {
+          return resolve([]);
+        }
+
+        if (!fs.existsSync(subsDir)) {
+          fs.mkdirSync(subsDir, { recursive: true });
+        }
+
+        const promises = streamLines.map((line) => {
+          const matchStream = line.match(/Stream #0:(\d+)/);
+          if (!matchStream) return Promise.resolve(null);
+          const streamIdx = matchStream[1];
+
+          let lang = "en";
+          const matchLang = line.match(/Stream #0:\d+\(([^)]+)\)/);
+          if (matchLang) {
+            lang = matchLang[1].slice(0, 3).toLowerCase();
+          }
+
+          const outFile = path.join(subsDir, `${epNum}Ep.${lang}.vtt`);
+          return new Promise((res) => {
+            child_process.exec(`"${ffmpegPath}" -y -i "${videoPath}" -map 0:${streamIdx} "${outFile}"`, (errOut) => {
+              if (errOut) {
+                res(null);
+              } else {
+                res({
+                  url: `/subtitles?file=${encodeURIComponent(outFile)}`,
+                  lang: lang,
+                });
+              }
+            });
+          });
+        });
+
+        Promise.all(promises).then((results) => {
+          resolve(results.filter(Boolean));
+        });
+      });
+    });
+  } catch (e) {
+    logger.error(`Error in extractSubtitlesFromVideo: ${e.message}`);
+    return [];
+  }
+}
+
 // Get Local Source By id
 async function getSourceById(type, baseDir, id, number, subdub) {
   if (!tables[type]) {
@@ -996,6 +1055,11 @@ async function getSourceById(type, baseDir, id, number, subdub) {
           };
         });
     }
+
+    if (subtitleFiles.length === 0 && type === "Anime" && fs.existsSync(finalPath)) {
+      subtitleFiles = await extractSubtitlesFromVideo(finalPath, number);
+    }
+
     return {
       filepath: finalPath,
       subtitleFiles: subtitleFiles,
