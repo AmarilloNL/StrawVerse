@@ -1235,15 +1235,18 @@ export default function VideoPlayer({
       className={`player-wrapper ${!showUI ? "hide-ui" : ""}`}
       onMouseMove={resetUITimeout}
     >
-      {/* Header controls */}
-      <div className="player-controls-header">
-        {!hideExit && (
-          <button onClick={onBack} className="player-back-btn">
-            <ArrowLeft size={18} />
-            <span>Exit Player</span>
-          </button>
-        )}
+      {/* Header Overlay */}
+      <div
+        className="player-controls-header"
+        style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%", boxSizing: "border-box" }}
+      >
         <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+          {!hideExit && (
+            <button onClick={onBack} className="player-back-btn">
+              <ArrowLeft size={18} />
+              <span>Exit Player</span>
+            </button>
+          )}
           <span className="player-episode-title">
             Playing Episode{" "}
             {currentEpisodeObj ? currentEpisodeObj.number : "Stream"} (
@@ -1259,6 +1262,94 @@ export default function VideoPlayer({
             )}
             <span>{isCurrentDownloaded ? "Local" : "Online"}</span>
           </span>
+        </div>
+        
+        <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
+          {(() => {
+            if (loading || !currentEpisodeObj) return null;
+            let availableLangs = [];
+            if (
+              currentEpisodeObj.langs &&
+              Array.isArray(currentEpisodeObj.langs)
+            ) {
+              availableLangs = currentEpisodeObj.langs;
+            } else {
+              if (currentEpisodeObj.lang === "both") {
+                availableLangs = ["sub", "dub"];
+              } else if (currentEpisodeObj.lang === "dub") {
+                availableLangs = ["dub"];
+              } else {
+                availableLangs = ["sub"];
+              }
+              if (
+                currentEpisodeObj.hasHsub &&
+                !availableLangs.includes("hsub")
+              ) {
+                availableLangs = ["sub", "hsub", "dub"].filter(
+                  (l) =>
+                    l === "hsub" ||
+                    (l === "sub" &&
+                      (currentEpisodeObj.lang === "sub" ||
+                        currentEpisodeObj.lang === "both")) ||
+                    (l === "dub" &&
+                      (currentEpisodeObj.lang === "dub" ||
+                        currentEpisodeObj.lang === "both")),
+                );
+              }
+            }
+
+            if (availableLangs.length <= 1) return null;
+
+            return (
+              <div className="player-quality-selector">
+                <span
+                  style={{
+                    fontSize: "12px",
+                    fontWeight: "600",
+                    color: "var(--text-muted)",
+                  }}
+                >
+                  Language:
+                </span>
+                <div className="player-qualities-wrapper">
+                  {availableLangs.map((langKey) => (
+                    <button
+                      key={langKey}
+                      onClick={() => setPlayerSubDub(langKey)}
+                      className={`player-quality-btn ${playerSubDub === langKey ? "active" : ""}`}
+                    >
+                      {(langKey || "sub").toUpperCase()}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            );
+          })()}
+
+          {!loading && sources.length > 0 && (
+            <div className="player-quality-selector">
+              <span
+                style={{
+                  fontSize: "12px",
+                  fontWeight: "600",
+                  color: "var(--text-muted)",
+                }}
+              >
+                Source:
+              </span>
+              <div className="player-qualities-wrapper">
+                {sources.map((s, idx) => (
+                  <button
+                    key={idx}
+                    onClick={() => setSelectedSource(s)}
+                    className={`player-quality-btn ${selectedSource === s ? "active" : ""}`}
+                  >
+                    {s.quality || "Default"}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -1559,95 +1650,6 @@ export default function VideoPlayer({
 
       {/* Control Navigation & Source Section */}
       <div className="player-controls-footer">
-        <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
-          {/* Language Selector if multiple options are available */}
-          {(() => {
-            if (loading || !currentEpisodeObj) return null;
-            let availableLangs = [];
-            if (
-              currentEpisodeObj.langs &&
-              Array.isArray(currentEpisodeObj.langs)
-            ) {
-              availableLangs = currentEpisodeObj.langs;
-            } else {
-              if (currentEpisodeObj.lang === "both") {
-                availableLangs = ["sub", "dub"];
-              } else if (currentEpisodeObj.lang === "dub") {
-                availableLangs = ["dub"];
-              } else {
-                availableLangs = ["sub"];
-              }
-              if (
-                currentEpisodeObj.hasHsub &&
-                !availableLangs.includes("hsub")
-              ) {
-                availableLangs = ["sub", "hsub", "dub"].filter(
-                  (l) =>
-                    l === "hsub" ||
-                    (l === "sub" &&
-                      (currentEpisodeObj.lang === "sub" ||
-                        currentEpisodeObj.lang === "both")) ||
-                    (l === "dub" &&
-                      (currentEpisodeObj.lang === "dub" ||
-                        currentEpisodeObj.lang === "both")),
-                );
-              }
-            }
-
-            if (availableLangs.length <= 1) return null;
-
-            return (
-              <div className="player-quality-selector">
-                <span
-                  style={{
-                    fontSize: "12px",
-                    fontWeight: "600",
-                    color: "var(--text-muted)",
-                  }}
-                >
-                  Language:
-                </span>
-                <div className="player-qualities-wrapper">
-                  {availableLangs.map((langKey) => (
-                    <button
-                      key={langKey}
-                      onClick={() => setPlayerSubDub(langKey)}
-                      className={`player-quality-btn ${playerSubDub === langKey ? "active" : ""}`}
-                    >
-                      {(langKey || "sub").toUpperCase()}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            );
-          })()}
-
-          {/* Quality Selector */}
-          {!loading && sources.length > 0 && (
-            <div className="player-quality-selector">
-              <span
-                style={{
-                  fontSize: "12px",
-                  fontWeight: "600",
-                  color: "var(--text-muted)",
-                }}
-              >
-                Source:
-              </span>
-              <div className="player-qualities-wrapper">
-                {sources.map((s, idx) => (
-                  <button
-                    key={idx}
-                    onClick={() => setSelectedSource(s)}
-                    className={`player-quality-btn ${selectedSource === s ? "active" : ""}`}
-                  >
-                    {s.quality || "Default"}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
 
         {/* Next/Prev Navigation */}
         {!hideExit && sortedEpisodes.length > 0 && (
