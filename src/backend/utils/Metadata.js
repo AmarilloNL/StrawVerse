@@ -140,7 +140,7 @@ async function MetadataAdd(type, valuesToAdd) {
         valuesToAdd.image = null;
       } else {
         if (Imageurl.includes("/api/image?url=")) {
-          Imageurl = Imageurl.split("/api/image?url=")[1];
+          Imageurl = decodeURIComponent(Imageurl.split("/api/image?url=")[1]);
         }
         try {
           const client = global.axios || axios;
@@ -297,6 +297,58 @@ function MetadataRemove(type, id) {
   }
 }
 
+function resolveLocalFolder(metadata, folderSet, type) {
+  let resolvedFolder = metadata.folder_name || "";
+  if (resolvedFolder && folderSet.has(resolvedFolder)) {
+    return resolvedFolder;
+  }
+  if (resolvedFolder) {
+    const suffixes = ["_sub", "_dub", "_hsub"];
+    for (const suffix of suffixes) {
+      const checkFolder = `${resolvedFolder}${suffix}`;
+      if (folderSet.has(checkFolder)) {
+        return checkFolder;
+      }
+    }
+  }
+
+  if (metadata.title) {
+    const baseName = metadata.title.replace(/[^a-zA-Z0-9]/g, "_");
+    const nameCandidates = [
+      baseName,
+      `${baseName}_sub`,
+      `${baseName}_dub`,
+      `${baseName}_hsub`,
+    ];
+    for (const cand of nameCandidates) {
+      if (folderSet.has(cand)) {
+        return cand;
+      }
+    }
+  }
+
+  if (metadata.linkedProviders) {
+    for (const lp of metadata.linkedProviders) {
+      const lpName = lp.folder_name || lp.title?.replace(/[^a-zA-Z0-9]/g, "_");
+      if (lpName) {
+        const lpCandidates = [
+          lpName,
+          `${lpName}_sub`,
+          `${lpName}_dub`,
+          `${lpName}_hsub`,
+        ];
+        for (const cand of lpCandidates) {
+          if (folderSet.has(cand)) {
+            return cand;
+          }
+        }
+      }
+    }
+  }
+
+  return null;
+}
+
 // Get All Metadata
 async function getAllMetadata(type, baseDir, page = 1, tag = null) {
   if (!tables[type]) {
@@ -317,7 +369,12 @@ async function getAllMetadata(type, baseDir, page = 1, tag = null) {
 
     let storedMetadata = [];
     try {
-      if (tag && tag !== "All" && tag !== "") {
+      if (
+        tag &&
+        tag !== "All" &&
+        tag !== "" &&
+        tag.toLowerCase() !== "downloads"
+      ) {
         const likeTag = `%"${tag}"%`;
         storedMetadata = global.db
           .prepare(
@@ -353,7 +410,12 @@ async function getAllMetadata(type, baseDir, page = 1, tag = null) {
     }
 
     try {
-      if (tag && tag !== "All" && tag !== "") {
+      if (
+        tag &&
+        tag !== "All" &&
+        tag !== "" &&
+        tag.toLowerCase() !== "downloads"
+      ) {
         const likeTag = `%"${tag}"%`;
         storedMetadata = global.db
           .prepare(
@@ -386,7 +448,13 @@ async function getAllMetadata(type, baseDir, page = 1, tag = null) {
     folders.forEach((alltitles) => {
       if (storedFolderSet.has(alltitles)) return;
 
-      if (tag && tag !== "All" && tag !== "") return;
+      if (
+        tag &&
+        tag !== "All" &&
+        tag !== "" &&
+        tag.toLowerCase() !== "downloads"
+      )
+        return;
 
       storedMetadata.push({
         title: alltitles.replaceAll("_", ""),
@@ -530,6 +598,28 @@ async function getAllMetadata(type, baseDir, page = 1, tag = null) {
 
       groupedMetadata.push(mainEntry);
     });
+
+    if (tag && tag.toLowerCase() === "downloads") {
+      groupedMetadata = groupedMetadata.filter((item) => {
+        let hasDownloadTag = false;
+        if (item.CustomTag) {
+          try {
+            const parsed = JSON.parse(item.CustomTag);
+            if (Array.isArray(parsed)) {
+              hasDownloadTag = parsed.some(
+                (t) => t && t.toLowerCase() === "downloads",
+              );
+            } else {
+              hasDownloadTag = String(parsed).toLowerCase() === "downloads";
+            }
+          } catch (_) {
+            hasDownloadTag = item.CustomTag.toLowerCase().includes("downloads");
+          }
+        }
+        const folder = resolveLocalFolder(item, folderSet, type);
+        return hasDownloadTag || !!folder;
+      });
+    }
 
     const siblingsMap = {};
     if (type === "Anime") {
@@ -1123,9 +1213,21 @@ async function getSourceById(type, baseDir, id, number, subdub) {
       subtitleFiles = await extractSubtitlesFromVideo(finalPath, number);
     }
 
+    let skipTimes = [];
+    try {
+      const row = queryOne("SELECT skip_times FROM Anime WHERE id = ?", [id]);
+      if (row && row.skip_times) {
+        const allSkipTimes = JSON.parse(row.skip_times);
+        skipTimes = allSkipTimes[String(number)] || [];
+      }
+    } catch (e) {
+      // ignore
+    }
+
     return {
       filepath: finalPath,
       subtitleFiles: subtitleFiles,
+      skipTimes: skipTimes,
     };
   } catch (err) {
     throw new Error(`Error fetching file by ID: ${err.message}`);

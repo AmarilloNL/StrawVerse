@@ -96,6 +96,7 @@ import {
   ChevronRight,
   Settings,
   Subtitles,
+  PictureInPicture,
 } from "lucide-react";
 import "./css/VideoPlayer.css";
 
@@ -193,6 +194,16 @@ export default function VideoPlayer({
   }, []);
 
   const [sources, setSources] = useState([]);
+
+  const [isPip, setIsPip] = useState(false);
+  const pipSupported =
+    typeof document !== "undefined" && document.pictureInPictureEnabled;
+
+  const [skipTimes, setSkipTimes] = useState([]);
+  const [autoSkip, setAutoSkip] = useState(
+    () => localStorage.getItem("player-auto-skip") !== "false",
+  );
+
   const [subtitles, setSubtitles] = useState([]);
   const [processedSubtitles, setProcessedSubtitles] = useState([]);
   const [selectedSource, setSelectedSource] = useState(null);
@@ -333,9 +344,77 @@ export default function VideoPlayer({
     }
   };
 
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    const originalTitle = document.title;
+
+    const handleEnterPiP = () => {
+      setIsPip(true);
+      const cleanEp =
+        typeof currentEpisode === "object"
+          ? currentEpisode.number || currentEpisode.id
+          : currentEpisode;
+      const displayTitle = animeTitle
+        ? `${animeTitle} - Ep ${cleanEp}`
+        : "StrawVerse Video";
+      document.title = `${displayTitle} (PiP)`;
+    };
+    const handleLeavePiP = () => {
+      setIsPip(false);
+      document.title = originalTitle || "StrawVerse";
+    };
+
+    video.addEventListener("enterpictureinpicture", handleEnterPiP);
+    video.addEventListener("leavepictureinpicture", handleLeavePiP);
+
+    return () => {
+      if (video) {
+        video.removeEventListener("enterpictureinpicture", handleEnterPiP);
+        video.removeEventListener("leavepictureinpicture", handleLeavePiP);
+      }
+      document.title = originalTitle || "StrawVerse";
+    };
+  }, [selectedSource, animeTitle, currentEpisode]);
+
+  const togglePiP = async () => {
+    const video = videoRef.current;
+    if (!video) return;
+    try {
+      if (document.pictureInPictureElement) {
+        await document.exitPictureInPicture();
+      } else {
+        await video.requestPictureInPicture();
+      }
+    } catch (err) {
+      console.error("Failed to toggle PiP:", err);
+    }
+  };
+
   const handleTimeUpdate = () => {
     if (videoRef.current) {
-      currentTimeRef.current = videoRef.current.currentTime;
+      const ct = videoRef.current.currentTime;
+      currentTimeRef.current = ct;
+      setCurrentTime(ct);
+
+      if (autoSkip && skipTimes.length > 0) {
+        const match = skipTimes.find(
+          (st) =>
+            ct >= st.interval.start_time && ct < st.interval.end_time - 0.5,
+        );
+        if (match) {
+          videoRef.current.currentTime = match.interval.end_time;
+          currentTimeRef.current = match.interval.end_time;
+          setCurrentTime(match.interval.end_time);
+          showIndicator(
+            ChevronRight,
+            `Skipped ${match.skip_type === "op" || match.skip_type === "mixed-op" ? "Opening" : "Ending"}`,
+          );
+          return;
+        }
+      }
+
       if (!rafRef.current) {
         rafRef.current = requestAnimationFrame(() => {
           rafRef.current = null;
@@ -483,9 +562,68 @@ export default function VideoPlayer({
     if (isCurrentDownloaded) {
       return Number(item.number) === Number(currentEpisode);
     } else {
-      return item.id === currentEpisode || Number(item.number) === Number(currentEpisode);
+      return (
+        item.id === currentEpisode ||
+        Number(item.number) === Number(currentEpisode)
+      );
     }
   });
+
+  useEffect(() => {
+    const fetchSkipTimes = async () => {
+      if (isCurrentDownloaded) {
+        return;
+      }
+      if (!malid) {
+        setSkipTimes([]);
+        return;
+      }
+      const epNum = currentEpisodeObj
+        ? currentEpisodeObj.number
+        : episodeNumOrId;
+      if (!epNum || isNaN(Number(epNum))) {
+        setSkipTimes([]);
+        return;
+      }
+
+      try {
+        const epLength = Math.round(durationRef.current || 0);
+        const res = await fetch(
+          `https://api.aniskip.com/v2/skip-times/${malid}/${Number(epNum)}?types[]=op&types[]=ed&types[]=mixed-op&types[]=mixed-ed&episodeLength=${epLength}`,
+        );
+        if (res.ok) {
+          const data = await res.json();
+          if (data && data.found && data.results) {
+            // Normalize v2 camelCase response to snake_case
+            const normalized = data.results.map((st) => ({
+              ...st,
+              skip_type: st.skipType || st.skip_type,
+              interval: {
+                start_time: st.interval.startTime ?? st.interval.start_time,
+                end_time: st.interval.endTime ?? st.interval.end_time,
+              },
+            }));
+            setSkipTimes(normalized);
+          } else {
+            setSkipTimes([]);
+          }
+        } else {
+          setSkipTimes([]);
+        }
+      } catch (err) {
+        console.warn("Failed to fetch skip times from AniSkip:", err);
+        setSkipTimes([]);
+      }
+    };
+
+    fetchSkipTimes();
+  }, [
+    malid,
+    currentEpisodeObj,
+    episodeNumOrId,
+    selectedSource,
+    isCurrentDownloaded,
+  ]);
 
   useEffect(() => {
     const currentEpNum = currentEpisodeObj
@@ -666,8 +804,12 @@ export default function VideoPlayer({
     setSelectedSource(null);
 
     try {
-      const targetEp = currentEpisodeObj ? currentEpisodeObj.id : currentEpisode;
-      const targetEpNum = currentEpisodeObj ? currentEpisodeObj.number : currentEpisode;
+      const targetEp = currentEpisodeObj
+        ? currentEpisodeObj.id
+        : currentEpisode;
+      const targetEpNum = currentEpisodeObj
+        ? currentEpisodeObj.number
+        : currentEpisode;
       const response = await fetch("/api/watch", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -694,9 +836,13 @@ export default function VideoPlayer({
 
       let fetchedSources = data?.sources || [];
       let fetchedSubs = data?.subtitles || [];
+      let fetchedSkipTimes = data?.skipTimes || [];
 
       setSources(fetchedSources);
       setSubtitles(fetchedSubs);
+      if (isCurrentDownloaded) {
+        setSkipTimes(fetchedSkipTimes);
+      }
       setUseTranscodeFallback(false);
 
       if (fetchedSources.length > 0) {
@@ -1253,7 +1399,13 @@ export default function VideoPlayer({
       {/* Header Overlay */}
       <div
         className="player-controls-header"
-        style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%", boxSizing: "border-box" }}
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          width: "100%",
+          boxSizing: "border-box",
+        }}
       >
         <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
           {!hideExit && (
@@ -1278,7 +1430,7 @@ export default function VideoPlayer({
             <span>{isCurrentDownloaded ? "Local" : "Online"}</span>
           </span>
         </div>
-        
+
         <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
           {(() => {
             if (loading || !currentEpisodeObj) return null;
@@ -1438,6 +1590,36 @@ export default function VideoPlayer({
               </div>
             )}
 
+            {/* Manual AniSkip Toast Overlay */}
+            {(() => {
+              if (autoSkip || skipTimes.length === 0) return null;
+              const activeSkip = skipTimes.find(
+                (st) =>
+                  currentTime >= st.interval.start_time &&
+                  currentTime < st.interval.end_time,
+              );
+              if (!activeSkip) return null;
+
+              return (
+                <button
+                  onClick={() => {
+                    if (videoRef.current) {
+                      videoRef.current.currentTime =
+                        activeSkip.interval.end_time;
+                      currentTimeRef.current = activeSkip.interval.end_time;
+                      setCurrentTime(activeSkip.interval.end_time);
+                    }
+                  }}
+                  className="player-skip-button"
+                >
+                  <span>
+                    Skip {activeSkip.skip_type === "op" ? "Opening" : "Ending"}
+                  </span>
+                  <ChevronRight size={14} />
+                </button>
+              );
+            })()}
+
             {/* Custom Controls Bar */}
             <div
               className={`player-custom-controls ${!showUI ? "hide-ui" : ""}`}
@@ -1458,6 +1640,37 @@ export default function VideoPlayer({
                     "--buffered-percent": `${(buffered / (duration || 1)) * 100}%`,
                   }}
                 />
+                {duration > 0 &&
+                  skipTimes.length > 0 &&
+                  skipTimes.map((st, idx) => {
+                    const startPct = (st.interval.start_time / duration) * 100;
+                    const widthPct =
+                      ((st.interval.end_time - st.interval.start_time) /
+                        duration) *
+                      100;
+                    return (
+                      <div
+                        key={`skip-marker-${idx}`}
+                        className="timeline-skip-marker"
+                        title={
+                          st.skip_type === "op" || st.skip_type === "mixed-op"
+                            ? "Intro"
+                            : "Outro"
+                        }
+                        style={{
+                          position: "absolute",
+                          left: `${startPct}%`,
+                          width: `${widthPct}%`,
+                          height: "100%",
+                          top: 0,
+                          backgroundColor: "rgba(59, 130, 246, 0.55)",
+                          borderRadius: "2px",
+                          pointerEvents: "none",
+                          zIndex: 1,
+                        }}
+                      />
+                    );
+                  })}
               </div>
 
               {/* Controls Controls Row */}
@@ -1645,6 +1858,18 @@ export default function VideoPlayer({
                     )}
                   </div>
 
+                  {/* Picture-in-Picture Button */}
+                  {pipSupported && (
+                    <button
+                      onClick={togglePiP}
+                      className={`player-control-btn ${isPip ? "active" : ""}`}
+                      aria-label="Toggle Picture-in-Picture"
+                      title="Picture-in-Picture"
+                    >
+                      <PictureInPicture size={16} />
+                    </button>
+                  )}
+
                   <button
                     onClick={toggleFullscreen}
                     className="player-control-btn"
@@ -1665,7 +1890,6 @@ export default function VideoPlayer({
 
       {/* Control Navigation & Source Section */}
       <div className="player-controls-footer">
-
         {/* Next/Prev Navigation */}
         {!hideExit && sortedEpisodes.length > 0 && (
           <div className="player-navigation">

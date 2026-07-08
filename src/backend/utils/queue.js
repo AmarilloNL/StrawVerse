@@ -1,5 +1,6 @@
 // libs
 const path = require("path");
+const axios = require("axios");
 const { getKeyValue, setKeyValue } = require("./db");
 const { logger } = require("./AppLogger");
 const { download } = require("./downloader");
@@ -207,14 +208,30 @@ async function continuousExecution() {
         }
 
         if (currentTask?.Type === "Anime") {
-          let { config, Title, EpNum, epid, SubDub } = currentTask;
+          let {
+            config,
+            Title,
+            EpNum,
+            epid,
+            SubDub,
+            malid,
+            id: animeId,
+          } = currentTask;
           if (config && Title && EpNum && epid && SubDub) {
             const lowerTitle = (Title || "").toLowerCase().trim();
             const lowerSubDub = (SubDub || "").toLowerCase().trim();
             const displayTitle = lowerTitle.endsWith(lowerSubDub)
               ? Title
               : `${Title} ${SubDub}`;
-            await downloadep(config, displayTitle, EpNum, epid, SubDub);
+            await downloadep(
+              config,
+              displayTitle,
+              EpNum,
+              epid,
+              SubDub,
+              malid,
+              animeId,
+            );
           } else {
             logger.error(
               `Error message: Some Anime Data missing [ removing from queue ]`,
@@ -275,7 +292,15 @@ async function continuousExecution() {
 }
 
 // start downloadloading ep
-async function downloadep(Videoconfig, Title, EpNum, AnimeEpId, SubDub) {
+async function downloadep(
+  Videoconfig,
+  Title,
+  EpNum,
+  AnimeEpId,
+  SubDub,
+  malid,
+  animeId,
+) {
   const directoryPath = await directoryMaker(
     Title,
     EpNum,
@@ -289,6 +314,8 @@ async function downloadep(Videoconfig, Title, EpNum, AnimeEpId, SubDub) {
       Title,
       AnimeEpId,
       SubDub,
+      malid,
+      animeId,
     );
   } catch (err) {
     throw err;
@@ -303,6 +330,8 @@ async function downloadEpisodeByQuality(
   Title,
   epid,
   subdub,
+  malid,
+  animeId,
 ) {
   try {
     let preferredQualities = ["1080p", "720p", "360p", "default", "backup"];
@@ -370,6 +399,56 @@ async function downloadEpisodeByQuality(
         (config?.subtitleFormat ?? "vtt") === "srt",
         selectedSource.headers ?? {},
       );
+
+      if (malid && animeId) {
+        try {
+          const epNum = parseFloat(episodeNumber);
+          if (!isNaN(epNum)) {
+            const aniskipUrl = `https://api.aniskip.com/v2/skip-times/${malid}/${Number(epNum)}?types[]=op&types[]=ed&types[]=mixed-op&types[]=mixed-ed&episodeLength=0`;
+            const res = await axios.get(aniskipUrl);
+            if (res.status === 200) {
+              const resData = res.data;
+              if (resData && resData.found && resData.results) {
+                const normalized = resData.results.map((st) => ({
+                  ...st,
+                  skip_type: st.skipType || st.skip_type,
+                  interval: {
+                    start_time: st.interval.startTime ?? st.interval.start_time,
+                    end_time: st.interval.endTime ?? st.interval.end_time,
+                  },
+                }));
+
+                let skipTimesData = {};
+                try {
+                  const row = global.db
+                    .prepare("SELECT skip_times FROM Anime WHERE id = ?")
+                    .get(animeId);
+                  if (row && row.skip_times) {
+                    skipTimesData = JSON.parse(row.skip_times);
+                  }
+                } catch (e) {
+                  skipTimesData = {};
+                }
+
+                skipTimesData[String(epNum)] = normalized;
+
+                global.db
+                  .prepare(
+                    `UPDATE Anime SET skip_times = ?, last_updated = CURRENT_TIMESTAMP WHERE id = ?`,
+                  )
+                  .run(JSON.stringify(skipTimesData), animeId);
+                logger.info(
+                  `[queueWorker] Saved skip times to Anime metadata DB for ${Title} EP ${epNum}`,
+                );
+              }
+            }
+          }
+        } catch (err) {
+          logger.warn(
+            `[queueWorker] Failed to save skip times: ${err.message}`,
+          );
+        }
+      }
     } else {
       throw new Error("No source link found.");
     }

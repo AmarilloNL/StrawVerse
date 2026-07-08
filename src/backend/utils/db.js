@@ -27,6 +27,7 @@ const tables = {
     last_updated: "DATE",
     MalID: "TEXT",
     CustomTag: "TEXT",
+    skip_times: "TEXT",
   },
   Manga: {
     id: "TEXT PRIMARY KEY",
@@ -124,6 +125,8 @@ const tables = {
     livechart_id: "TEXT",
     episode: "INTEGER",
     date: "INTEGER",
+    title: "TEXT",
+    image: "TEXT",
   },
   unlinked_mal_ids: {
     id: "TEXT PRIMARY KEY",
@@ -214,6 +217,37 @@ try {
   });
 } catch (e) {
   logger.error("Failed to clean up deprecated tables: " + e.message);
+}
+
+try {
+  const tableCheck = global.db
+    .prepare(
+      "SELECT name FROM sqlite_master WHERE type='table' AND name='next_episodes'",
+    )
+    .get();
+  if (tableCheck) {
+    const columns = global.db
+      .prepare("PRAGMA table_info(next_episodes)")
+      .all()
+      .map((c) => c.name);
+    if (!columns.includes("title")) {
+      global.db.exec("DROP TABLE IF EXISTS next_episodes");
+      try {
+        global.db
+          .prepare(
+            "DELETE FROM Settings WHERE key = 'last_livechart_schedule_run'",
+          )
+          .run();
+      } catch (_) {}
+      logger.info(
+        "[db] Dropped next_episodes table and cleared last schedule run timestamp to trigger schema migration and schedule refresh.",
+      );
+    }
+  }
+} catch (e) {
+  logger.error(
+    "[db] Failed during next_episodes schema migration check: " + e.message,
+  );
 }
 
 // Create tables & update schema

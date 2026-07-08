@@ -53,7 +53,6 @@ export default function WatchTogetherView({ onNavigate }) {
 
   const unreadCount = isChatExpanded ? 0 : chatList.length - lastReadCount;
 
-
   const [providers, setProviders] = useState([]);
   const [selectedProvider, setSelectedProvider] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
@@ -174,29 +173,36 @@ export default function WatchTogetherView({ onNavigate }) {
         }
       }
 
-      const isMatch =
-        selectedAnime &&
-        (!matchedQueueTitle ||
-          selectedAnime.title
-            .toLowerCase()
-            .includes(matchedQueueTitle.toLowerCase()) ||
-          matchedQueueTitle
-            .toLowerCase()
-            .includes(selectedAnime.title.toLowerCase()));
-
       setActiveMedia((prev) => {
-        const titleToUse = isMatch 
-          ? selectedAnime.title 
-          : (matchedQueueTitle || (prev?.animeTitle && prev.animeTitle !== "Watch Together Session" ? prev.animeTitle : "Watch Together Session"));
-        const imageToUse = isMatch 
-          ? selectedAnime.image 
-          : (prev?.image || "");
-        const idToUse = isMatch 
-          ? selectedAnime.id 
-          : String(animeID);
-        const epListToUse = isMatch && animeEpisodes.length > 0 
-          ? animeEpisodes 
-          : (prev?.episodesList || [{ id: epIdentifier, number: episode }]);
+        const isMatch =
+          selectedAnime &&
+          (!prev ||
+            prev.id === selectedAnime.id ||
+            prev.animeTitle === "Watch Together Session") &&
+          (!matchedQueueTitle ||
+            selectedAnime.title
+              .toLowerCase()
+              .includes(matchedQueueTitle.toLowerCase()) ||
+            matchedQueueTitle
+              .toLowerCase()
+              .includes(selectedAnime.title.toLowerCase()));
+
+        const titleToUse = isMatch
+          ? selectedAnime.title
+          : matchedQueueTitle ||
+            (prev?.animeTitle && prev.animeTitle !== "Watch Together Session"
+              ? prev.animeTitle
+              : "Watch Together Session");
+        const imageToUse = isMatch ? selectedAnime.image : prev?.image || "";
+        const idToUse = isMatch
+          ? selectedAnime.id
+          : prev?.id && prev.id !== "100"
+            ? prev.id
+            : String(animeID);
+        const epListToUse =
+          isMatch && animeEpisodes.length > 0
+            ? animeEpisodes
+            : prev?.episodesList || [{ id: epIdentifier, number: episode }];
 
         if (!prev) {
           return {
@@ -329,13 +335,18 @@ export default function WatchTogetherView({ onNavigate }) {
 
       if (episodesList.length > 0 && !activeMedia && queue.length === 0) {
         const sorted = [...episodesList].sort((a, b) => {
-          const aNum = typeof a.number === "number" ? a.number : parseFloat(a.number) || 0;
-          const bNum = typeof b.number === "number" ? b.number : parseFloat(b.number) || 0;
+          const aNum =
+            typeof a.number === "number" ? a.number : parseFloat(a.number) || 0;
+          const bNum =
+            typeof b.number === "number" ? b.number : parseFloat(b.number) || 0;
           return aNum - bNum;
         });
         const firstEp = sorted[0];
         if (firstEp) {
-          const epNum = typeof firstEp.number === "number" ? firstEp.number : parseFloat(firstEp.number) || 1;
+          const epNum =
+            typeof firstEp.number === "number"
+              ? firstEp.number
+              : parseFloat(firstEp.number) || 1;
           const mediaObj = {
             id: item.id,
             ep: firstEp.id || firstEp.number || 1,
@@ -397,7 +408,7 @@ export default function WatchTogetherView({ onNavigate }) {
     }
   };
 
-    const handleSkipEpisode = () => {
+  const handleSkipEpisode = () => {
     if (queue.length > 0) {
       const nextItem = queue[0];
       handlePlayFromQueue(nextItem);
@@ -411,7 +422,9 @@ export default function WatchTogetherView({ onNavigate }) {
           const bNum = parseFloat(b.number) || 0;
           return aNum - bNum;
         });
-        const currentIdx = sorted.findIndex(e => parseFloat(e.number) === currentEpNum);
+        const currentIdx = sorted.findIndex(
+          (e) => parseFloat(e.number) === currentEpNum,
+        );
         if (currentIdx !== -1 && currentIdx + 1 < sorted.length) {
           const nextEp = sorted[currentIdx + 1];
           handlePlayEpisode(nextEp);
@@ -684,13 +697,16 @@ export default function WatchTogetherView({ onNavigate }) {
                 </div>
                 <h3>Create Watch Room</h3>
               </div>
-              
+
               <div className="wt-landing-box-middle">
                 <p>Host a new watch room and share code with friends.</p>
               </div>
 
               <div className="wt-landing-box-bottom">
-                <button className="wt-btn-primary wt-btn-landing" onClick={handleCreateRoom}>
+                <button
+                  className="wt-btn-primary wt-btn-landing"
+                  onClick={handleCreateRoom}
+                >
                   Create Watch Room
                 </button>
               </div>
@@ -704,7 +720,7 @@ export default function WatchTogetherView({ onNavigate }) {
                 </div>
                 <h3>Join Watch Room</h3>
               </div>
-              
+
               <div className="wt-landing-box-middle">
                 <p>Enter the room code to connect instantly.</p>
               </div>
@@ -719,7 +735,11 @@ export default function WatchTogetherView({ onNavigate }) {
                   maxLength={6}
                 />
                 <button
-                  className={joinInput.trim().length === 6 ? "wt-btn-primary wt-btn-landing" : "wt-btn-secondary wt-btn-landing"}
+                  className={
+                    joinInput.trim().length === 6
+                      ? "wt-btn-primary wt-btn-landing"
+                      : "wt-btn-secondary wt-btn-landing"
+                  }
                   onClick={handleJoinRoom}
                   disabled={joinInput.trim().length !== 6}
                 >
@@ -739,7 +759,11 @@ export default function WatchTogetherView({ onNavigate }) {
       <div className="wt-top-bar">
         <div className="wt-top-left">
           <span className="wt-room-code">{roomCode}</span>
-          <button className="wt-btn-copy-sm" onClick={handleCopyCode} title="Copy Room Code">
+          <button
+            className="wt-btn-copy-sm"
+            onClick={handleCopyCode}
+            title="Copy Room Code"
+          >
             {copied ? <Check size={12} color="#10b981" /> : <Copy size={12} />}
             <span>{copied ? "Copied!" : "Copy"}</span>
           </button>
@@ -758,21 +782,30 @@ export default function WatchTogetherView({ onNavigate }) {
                   if (e.target.value === "") setSearchDropdownVisible(false);
                 }}
                 onFocus={() => {
-                   if (searchResults.length > 0) setSearchDropdownVisible(true);
+                  if (searchResults.length > 0) setSearchDropdownVisible(true);
                 }}
               />
             </div>
-            <button type="submit" className="wt-btn-primary" disabled={isSearching}>
+            <button
+              type="submit"
+              className="wt-btn-primary"
+              disabled={isSearching}
+            >
               {isSearching ? "..." : "Search"}
             </button>
           </form>
-          
+
           {/* SEARCH DROPDOWN (ROFI STYLE) */}
           {searchDropdownVisible && searchResults.length > 0 && (
             <div className="wt-search-dropdown">
               <div className="wt-search-dropdown-header">
                 <span>Search Results</span>
-                <button onClick={() => setSearchDropdownVisible(false)} className="wt-sd-close-btn"><X size={14}/></button>
+                <button
+                  onClick={() => setSearchDropdownVisible(false)}
+                  className="wt-sd-close-btn"
+                >
+                  <X size={14} />
+                </button>
               </div>
               <div className="wt-search-dropdown-list">
                 {searchResults.map((item, idx) => (
@@ -781,9 +814,13 @@ export default function WatchTogetherView({ onNavigate }) {
                     className="wt-search-dropdown-item"
                     onClick={() => handleSelectAnime(item)}
                   >
-                    <img src={item.image} alt={item.title} className="wt-sd-image" />
+                    <img
+                      src={item.image}
+                      alt={item.title}
+                      className="wt-sd-image"
+                    />
                     <div className="wt-sd-info">
-                       <span className="wt-sd-title">{item.title}</span>
+                      <span className="wt-sd-title">{item.title}</span>
                     </div>
                   </div>
                 ))}
@@ -793,7 +830,11 @@ export default function WatchTogetherView({ onNavigate }) {
         </div>
 
         <div className="wt-top-right">
-          <button className="wt-btn-exit-sm" onClick={() => watchTogetherClient.disconnect()} title="Leave Room">
+          <button
+            className="wt-btn-exit-sm"
+            onClick={() => watchTogetherClient.disconnect()}
+            title="Leave Room"
+          >
             <LogOut size={14} color="#f87171" /> Leave Room
           </button>
         </div>
@@ -802,12 +843,20 @@ export default function WatchTogetherView({ onNavigate }) {
       {isExtensionMismatch && (
         <div className="wt-mismatch-banner-top">
           <AlertTriangle size={16} />
-          <strong>Extension Warning:</strong> You can't sync properly! Ask @{users.find((u) => u.isHost)?.username || "Host"} to select the <strong>{hostProvider}</strong> provider.
+          <strong>Extension Warning:</strong> You can't sync properly! Ask @
+          {users.find((u) => u.isHost)?.username || "Host"} to select the{" "}
+          <strong>{hostProvider}</strong> provider.
         </div>
       )}
 
       <div className="wt-main-body">
-        <div className="wt-left-content" style={{ marginRight: isChatExpanded ? "340px" : "50px", transition: "margin-right 0.3s ease" }}>
+        <div
+          className="wt-left-content"
+          style={{
+            marginRight: isChatExpanded ? "340px" : "50px",
+            transition: "margin-right 0.3s ease",
+          }}
+        >
           <div className="wt-player-area">
             {activeMedia ? (
               <VideoPlayer
@@ -835,10 +884,18 @@ export default function WatchTogetherView({ onNavigate }) {
             <div className="wt-current-info">
               {activeMedia ? (
                 <>
-                  <img src={activeMedia.image} alt={activeMedia.animeTitle} className="wt-bottom-cover" />
+                  <img
+                    src={activeMedia.image}
+                    alt={activeMedia.animeTitle}
+                    className="wt-bottom-cover"
+                  />
                   <div className="wt-bottom-details">
-                    <span className="wt-bottom-title">{activeMedia.animeTitle}</span>
-                    <span className="wt-bottom-ep">Episode {activeMedia.ep}</span>
+                    <span className="wt-bottom-title">
+                      {activeMedia.animeTitle}
+                    </span>
+                    <span className="wt-bottom-ep">
+                      Episode {activeMedia.ep}
+                    </span>
                   </div>
                   {hasPrivileges && (
                     <div className="wt-bottom-actions">
@@ -849,55 +906,91 @@ export default function WatchTogetherView({ onNavigate }) {
                         title="Switch source"
                       >
                         {providers.map((p) => (
-                          <option key={p} value={p}>{p}</option>
+                          <option key={p} value={p}>
+                            {p}
+                          </option>
                         ))}
                       </select>
-                      <button className="wt-btn-skip" onClick={handleSkipEpisode}>
+                      <button
+                        className="wt-btn-skip"
+                        onClick={handleSkipEpisode}
+                      >
                         Skip <Play size={12} fill="currentColor" />
                       </button>
                     </div>
                   )}
                 </>
               ) : (
-                <div style={{color: "#9ca3af", fontSize: "0.85rem", padding: "12px"}}>Nothing currently playing</div>
+                <div
+                  style={{
+                    color: "#9ca3af",
+                    fontSize: "0.85rem",
+                    padding: "12px",
+                  }}
+                >
+                  Nothing currently playing
+                </div>
               )}
             </div>
-            
+
             <div className="wt-next-info">
               <span className="wt-next-label">Next in Queue</span>
               {queue.length > 0 ? (
-                <span className="wt-next-title">{queue[0].title || `Ep ${queue[0].episode}`}</span>
+                <span className="wt-next-title">
+                  {queue[0].title || `Ep ${queue[0].episode}`}
+                </span>
               ) : (
-                <span className="wt-next-title" style={{color: "#6b7280"}}>Auto-play next ep</span>
+                <span className="wt-next-title" style={{ color: "#6b7280" }}>
+                  Auto-play next ep
+                </span>
               )}
             </div>
           </div>
-          
+
           <div className="wt-queue-scroll">
             {/* Anime description section */}
-            {selectedAnime && selectedAnimeDetails?.description && (
-              isSynopsisCollapsed && activeMedia ? (
-                <div className="wt-collapsed-synopsis-bar" style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                  padding: "10px 16px",
-                  background: "rgba(255, 255, 255, 0.02)",
-                  border: "1px solid rgba(255, 255, 255, 0.06)",
-                  borderRadius: "8px",
-                  marginBottom: "12px"
-                }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            {selectedAnime &&
+              selectedAnimeDetails?.description &&
+              (isSynopsisCollapsed && activeMedia ? (
+                <div
+                  className="wt-collapsed-synopsis-bar"
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    padding: "10px 16px",
+                    background: "rgba(255, 255, 255, 0.02)",
+                    border: "1px solid rgba(255, 255, 255, 0.06)",
+                    borderRadius: "8px",
+                    marginBottom: "12px",
+                  }}
+                >
+                  <div
+                    style={{ display: "flex", alignItems: "center", gap: 10 }}
+                  >
                     <img
                       src={selectedAnimeDetails?.image || selectedAnime.image}
                       alt={selectedAnime.title}
-                      style={{ width: "32px", height: "45px", objectFit: "cover", borderRadius: "4px" }}
+                      style={{
+                        width: "32px",
+                        height: "45px",
+                        objectFit: "cover",
+                        borderRadius: "4px",
+                      }}
                     />
                     <div style={{ display: "flex", flexDirection: "column" }}>
-                      <span style={{ fontSize: "0.85rem", fontWeight: "700", color: "#fff" }}>
+                      <span
+                        style={{
+                          fontSize: "0.85rem",
+                          fontWeight: "700",
+                          color: "#fff",
+                        }}
+                      >
                         {selectedAnimeDetails?.title || selectedAnime.title}
                       </span>
-                      <span style={{ fontSize: "0.72rem", color: "#cbd5e1" }}>Synopsis & poster collapsed</span>
+                      <span style={{ fontSize: "0.72rem", color: "#cbd5e1" }}>
+                        Synopsis & poster collapsed
+                      </span>
                     </div>
                   </div>
                   <button
@@ -911,7 +1004,7 @@ export default function WatchTogetherView({ onNavigate }) {
                       padding: "4px 10px",
                       fontSize: "0.75rem",
                       cursor: "pointer",
-                      fontWeight: "600"
+                      fontWeight: "600",
                     }}
                   >
                     Show Info
@@ -925,8 +1018,17 @@ export default function WatchTogetherView({ onNavigate }) {
                     className="wt-scroll-poster"
                   />
                   <div className="wt-scroll-desc-body">
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", width: "100%" }}>
-                      <span className="wt-scroll-anime-title">{selectedAnimeDetails?.title || selectedAnime.title}</span>
+                    <div
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "flex-start",
+                        width: "100%",
+                      }}
+                    >
+                      <span className="wt-scroll-anime-title">
+                        {selectedAnimeDetails?.title || selectedAnime.title}
+                      </span>
                       {activeMedia && (
                         <button
                           className="wt-btn-toggle-synopsis"
@@ -940,28 +1042,39 @@ export default function WatchTogetherView({ onNavigate }) {
                             fontSize: "0.75rem",
                             cursor: "pointer",
                             fontWeight: "600",
-                            transition: "background 0.2s"
+                            transition: "background 0.2s",
                           }}
                         >
                           Hide Info
                         </button>
                       )}
                     </div>
-                    <p className="wt-scroll-desc-text">{selectedAnimeDetails.description}</p>
+                    <p className="wt-scroll-desc-text">
+                      {selectedAnimeDetails.description}
+                    </p>
                   </div>
                 </div>
-              )
-            )}
+              ))}
 
             {/* Anime episodes section */}
             {loadingEpisodes && (
-              <div style={{ padding: "20px 0", color: "#a78bfa", fontSize: "0.9rem", fontWeight: "600" }}>
+              <div
+                style={{
+                  padding: "20px 0",
+                  color: "#a78bfa",
+                  fontSize: "0.9rem",
+                  fontWeight: "600",
+                }}
+              >
                 Loading episodes list...
               </div>
             )}
 
             {selectedAnime && !loadingEpisodes && animeEpisodes.length > 0 && (
-              <div className="wt-episodes-section" style={{ marginTop: 20, marginBottom: 20 }}>
+              <div
+                className="wt-episodes-section"
+                style={{ marginTop: 20, marginBottom: 20 }}
+              >
                 <div className="wt-ep-toolbar">
                   <h4
                     style={{
@@ -982,9 +1095,7 @@ export default function WatchTogetherView({ onNavigate }) {
                         className="wt-ep-search-input"
                         placeholder="Filter episode..."
                         value={episodeSearchQuery}
-                        onChange={(e) =>
-                          setEpisodeSearchQuery(e.target.value)
-                        }
+                        onChange={(e) => setEpisodeSearchQuery(e.target.value)}
                       />
                       {episodeSearchQuery && (
                         <button
@@ -1109,13 +1220,13 @@ export default function WatchTogetherView({ onNavigate }) {
                 )}
               </div>
             )}
-
-
           </div>
         </div>
 
         {/* RIGHT CONTENT (SIDEBAR WITH TABS) */}
-        <div className={`wt-right-chat ${isChatExpanded ? "expanded" : "collapsed"}`}>
+        <div
+          className={`wt-right-chat ${isChatExpanded ? "expanded" : "collapsed"}`}
+        >
           {isChatExpanded ? (
             <div className="wt-chat-inner">
               {/* 3 Icon-Only Toggle Switch Bar (Chat | Queue | Users) */}
@@ -1161,12 +1272,35 @@ export default function WatchTogetherView({ onNavigate }) {
               </div>
 
               {/* Tab Content Area */}
-              <div className="wt-tab-content-area" style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", padding: "14px" }}>
+              <div
+                className="wt-tab-content-area"
+                style={{
+                  flex: 1,
+                  display: "flex",
+                  flexDirection: "column",
+                  overflow: "hidden",
+                  padding: "14px",
+                }}
+              >
                 {activeTab === "chat" ? (
-                  <div style={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" }}>
+                  <div
+                    style={{
+                      display: "flex",
+                      flexDirection: "column",
+                      height: "100%",
+                      overflow: "hidden",
+                    }}
+                  >
                     <div className="wt-chat-messages">
                       {chatList.length === 0 ? (
-                        <div style={{ color: "#6b7280", fontSize: "0.85rem", textAlign: "center", marginTop: 40 }}>
+                        <div
+                          style={{
+                            color: "#6b7280",
+                            fontSize: "0.85rem",
+                            textAlign: "center",
+                            marginTop: 40,
+                          }}
+                        >
                           No messages yet. Say hi!
                         </div>
                       ) : (
@@ -1180,7 +1314,10 @@ export default function WatchTogetherView({ onNavigate }) {
                       <div ref={chatEndRef} />
                     </div>
 
-                    <form className="wt-chat-input-row" onSubmit={handleSendChat}>
+                    <form
+                      className="wt-chat-input-row"
+                      onSubmit={handleSendChat}
+                    >
                       <input
                         type="text"
                         className="wt-chat-input-lg"
@@ -1188,14 +1325,34 @@ export default function WatchTogetherView({ onNavigate }) {
                         value={chatMessage}
                         onChange={(e) => setChatMessage(e.target.value)}
                       />
-                      <button type="submit" className="wt-btn-send-lg">Send</button>
+                      <button type="submit" className="wt-btn-send-lg">
+                        Send
+                      </button>
                     </form>
                   </div>
                 ) : activeTab === "queue" ? (
                   /* Queue View */
-                  <div style={{ overflowY: "auto", flex: 1, display: "flex", flexDirection: "column" }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-                      <h4 style={{ margin: 0, color: "#fff", fontSize: "0.9rem" }}>Shared Watch Queue</h4>
+                  <div
+                    style={{
+                      overflowY: "auto",
+                      flex: 1,
+                      display: "flex",
+                      flexDirection: "column",
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        marginBottom: 12,
+                      }}
+                    >
+                      <h4
+                        style={{ margin: 0, color: "#fff", fontSize: "0.9rem" }}
+                      >
+                        Shared Watch Queue
+                      </h4>
                       {hasPrivileges && queue.length > 0 && (
                         <button
                           onClick={handleClearQueue}
@@ -1216,7 +1373,9 @@ export default function WatchTogetherView({ onNavigate }) {
                     </div>
                     <div style={{ flex: 1, overflowY: "auto" }}>
                       {queue.length === 0 ? (
-                        <div style={{ color: "#6b7280", fontSize: "0.85rem" }}>Watch queue is empty.</div>
+                        <div style={{ color: "#6b7280", fontSize: "0.85rem" }}>
+                          Watch queue is empty.
+                        </div>
                       ) : (
                         queue.map((item, idx) => (
                           <div
@@ -1229,7 +1388,9 @@ export default function WatchTogetherView({ onNavigate }) {
                               gap: "8px",
                             }}
                           >
-                            <span style={{ fontWeight: 700, color: "#a78bfa" }}>#{idx + 1}</span>
+                            <span style={{ fontWeight: 700, color: "#a78bfa" }}>
+                              #{idx + 1}
+                            </span>
                             <span
                               style={{
                                 flex: 1,
@@ -1238,12 +1399,18 @@ export default function WatchTogetherView({ onNavigate }) {
                                 overflow: "hidden",
                                 textOverflow: "ellipsis",
                               }}
-                              title={item.title || `Anime #${item.animeID} - Ep ${item.episode}`}
+                              title={
+                                item.title ||
+                                `Anime #${item.animeID} - Ep ${item.episode}`
+                              }
                             >
-                              {item.title || `Anime #${item.animeID} - Ep ${item.episode}`}
+                              {item.title ||
+                                `Anime #${item.animeID} - Ep ${item.episode}`}
                             </span>
                             {hasPrivileges && (
-                              <div style={{ display: "inline-flex", gap: "6px" }}>
+                              <div
+                                style={{ display: "inline-flex", gap: "6px" }}
+                              >
                                 <button
                                   className="wt-btn-play-sm"
                                   onClick={() => handlePlayFromQueue(item)}
@@ -1262,7 +1429,9 @@ export default function WatchTogetherView({ onNavigate }) {
                                 </button>
                                 <button
                                   className="wt-btn-delete-sm"
-                                  onClick={() => watchTogetherClient.sendRemoveQueue(idx)}
+                                  onClick={() =>
+                                    watchTogetherClient.sendRemoveQueue(idx)
+                                  }
                                   style={{
                                     padding: "4px 8px",
                                     fontSize: "0.72rem",
@@ -1289,16 +1458,52 @@ export default function WatchTogetherView({ onNavigate }) {
                   </div>
                 ) : (
                   /* Users View */
-                  <div style={{ overflowY: "auto", flex: 1, display: "flex", flexDirection: "column" }}>
-                    <h4 style={{ margin: "0 0 12px 0", color: "#fff", fontSize: "0.9rem" }}>Connected Users ({users.length})</h4>
-                    <div className="wt-users-list" style={{ flex: 1, overflowY: "auto" }}>
+                  <div
+                    style={{
+                      overflowY: "auto",
+                      flex: 1,
+                      display: "flex",
+                      flexDirection: "column",
+                    }}
+                  >
+                    <h4
+                      style={{
+                        margin: "0 0 12px 0",
+                        color: "#fff",
+                        fontSize: "0.9rem",
+                      }}
+                    >
+                      Connected Users ({users.length})
+                    </h4>
+                    <div
+                      className="wt-users-list"
+                      style={{ flex: 1, overflowY: "auto" }}
+                    >
                       {users.map((u, idx) => (
                         <div key={idx} className="wt-user-row">
-                          <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#10b981", flexShrink: 0 }} />
-                          <span style={{ fontWeight: 600, color: "#e5e7eb", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          <div
+                            style={{
+                              width: 8,
+                              height: 8,
+                              borderRadius: "50%",
+                              background: "#10b981",
+                              flexShrink: 0,
+                            }}
+                          />
+                          <span
+                            style={{
+                              fontWeight: 600,
+                              color: "#e5e7eb",
+                              overflow: "hidden",
+                              textOverflow: "ellipsis",
+                              whiteSpace: "nowrap",
+                            }}
+                          >
                             {u.username}
                           </span>
-                          {u.isHost && <span className="wt-user-badge-host">HOST</span>}
+                          {u.isHost && (
+                            <span className="wt-user-badge-host">HOST</span>
+                          )}
                           {u.isCoHost && (
                             <span
                               className="wt-user-badge-cohost"
@@ -1319,13 +1524,22 @@ export default function WatchTogetherView({ onNavigate }) {
                           {isHost && u.id !== watchTogetherClient.userID && (
                             <button
                               className="wt-btn-cohost-sm"
-                              onClick={() => watchTogetherClient.sendCoHostChange(u.id, !u.isCoHost)}
+                              onClick={() =>
+                                watchTogetherClient.sendCoHostChange(
+                                  u.id,
+                                  !u.isCoHost,
+                                )
+                              }
                               style={{
                                 marginLeft: "auto",
                                 padding: "2px 6px",
                                 fontSize: "0.68rem",
-                                background: u.isCoHost ? "rgba(239, 68, 68, 0.2)" : "rgba(16, 185, 129, 0.2)",
-                                border: u.isCoHost ? "1px solid rgba(239, 68, 68, 0.4)" : "1px solid rgba(16, 185, 129, 0.4)",
+                                background: u.isCoHost
+                                  ? "rgba(239, 68, 68, 0.2)"
+                                  : "rgba(16, 185, 129, 0.2)",
+                                border: u.isCoHost
+                                  ? "1px solid rgba(239, 68, 68, 0.4)"
+                                  : "1px solid rgba(16, 185, 129, 0.4)",
                                 color: u.isCoHost ? "#f87171" : "#34d399",
                                 borderRadius: "4px",
                                 cursor: "pointer",
@@ -1363,22 +1577,26 @@ export default function WatchTogetherView({ onNavigate }) {
               >
                 <MessageSquare size={16} />
                 {unreadCount > 0 && (
-                  <div className="wt-chat-unread-circle-mini" title={`${unreadCount} new message(s)`} style={{
-                    position: "absolute",
-                    top: "-4px",
-                    right: "-4px",
-                    width: "16px",
-                    height: "16px",
-                    borderRadius: "50%",
-                    background: "#ef4444",
-                    color: "#fff",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    fontSize: "0.6rem",
-                    fontWeight: 700,
-                    boxShadow: "0 0 6px rgba(239, 68, 68, 0.4)"
-                  }}>
+                  <div
+                    className="wt-chat-unread-circle-mini"
+                    title={`${unreadCount} new message(s)`}
+                    style={{
+                      position: "absolute",
+                      top: "-4px",
+                      right: "-4px",
+                      width: "16px",
+                      height: "16px",
+                      borderRadius: "50%",
+                      background: "#ef4444",
+                      color: "#fff",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      fontSize: "0.6rem",
+                      fontWeight: 700,
+                      boxShadow: "0 0 6px rgba(239, 68, 68, 0.4)",
+                    }}
+                  >
                     {unreadCount}
                   </div>
                 )}
@@ -1395,22 +1613,26 @@ export default function WatchTogetherView({ onNavigate }) {
               >
                 <ListVideo size={16} />
                 {queue.length > 0 && (
-                  <div className="wt-chat-unread-circle-mini" title={`${queue.length} items in queue`} style={{
-                    position: "absolute",
-                    top: "-4px",
-                    right: "-4px",
-                    width: "16px",
-                    height: "16px",
-                    borderRadius: "50%",
-                    background: "#7c3aed",
-                    color: "#fff",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    fontSize: "0.6rem",
-                    fontWeight: 700,
-                    boxShadow: "0 0 6px rgba(124, 58, 237, 0.4)"
-                  }}>
+                  <div
+                    className="wt-chat-unread-circle-mini"
+                    title={`${queue.length} items in queue`}
+                    style={{
+                      position: "absolute",
+                      top: "-4px",
+                      right: "-4px",
+                      width: "16px",
+                      height: "16px",
+                      borderRadius: "50%",
+                      background: "#7c3aed",
+                      color: "#fff",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      fontSize: "0.6rem",
+                      fontWeight: 700,
+                      boxShadow: "0 0 6px rgba(124, 58, 237, 0.4)",
+                    }}
+                  >
                     {queue.length}
                   </div>
                 )}
@@ -1427,22 +1649,26 @@ export default function WatchTogetherView({ onNavigate }) {
               >
                 <Users size={16} />
                 {users.length > 0 && (
-                  <div className="wt-chat-unread-circle-mini" title={`${users.length} connected users`} style={{
-                    position: "absolute",
-                    top: "-4px",
-                    right: "-4px",
-                    width: "16px",
-                    height: "16px",
-                    borderRadius: "50%",
-                    background: "#10b981",
-                    color: "#fff",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    fontSize: "0.6rem",
-                    fontWeight: 700,
-                    boxShadow: "0 0 6px rgba(16, 185, 129, 0.4)"
-                  }}>
+                  <div
+                    className="wt-chat-unread-circle-mini"
+                    title={`${users.length} connected users`}
+                    style={{
+                      position: "absolute",
+                      top: "-4px",
+                      right: "-4px",
+                      width: "16px",
+                      height: "16px",
+                      borderRadius: "50%",
+                      background: "#10b981",
+                      color: "#fff",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      fontSize: "0.6rem",
+                      fontWeight: 700,
+                      boxShadow: "0 0 6px rgba(16, 185, 129, 0.4)",
+                    }}
+                  >
                     {users.length}
                   </div>
                 )}

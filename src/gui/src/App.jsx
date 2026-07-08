@@ -368,7 +368,7 @@ export default function App() {
               navigateTo("info", {
                 id,
                 type: contentType,
-                provider: "provider",
+                provider: prov,
                 backText,
                 autoPlay,
               })

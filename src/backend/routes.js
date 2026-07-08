@@ -78,12 +78,33 @@ function wrapImagesInObject(obj) {
     if (Array.isArray(newObj.results)) {
       newObj.results = newObj.results.map((item) => wrapImagesInObject(item));
     }
-    if (
-      typeof newObj.image === "string" &&
-      (newObj.image.startsWith("http://") ||
-        newObj.image.startsWith("https://"))
-    ) {
-      newObj.image = `/api/image?url=${encodeURIComponent(newObj.image)}`;
+    if (typeof newObj.image === "string") {
+      let imgUrl = newObj.image;
+      if (imgUrl.startsWith("/api/image?url=")) {
+        imgUrl = decodeURIComponent(imgUrl.split("/api/image?url=")[1]);
+      }
+      if (
+        imgUrl.startsWith("http://") ||
+        imgUrl.startsWith("https://") ||
+        imgUrl.startsWith("file://")
+      ) {
+        if (imgUrl.startsWith("http://") || imgUrl.startsWith("https://")) {
+          try {
+            const cached = queryOne(
+              "SELECT filename FROM ImageCache WHERE url = ?",
+              [imgUrl],
+            );
+            if (cached) {
+              const cacheDir = ImageCacheManager.getImageCacheDir();
+              const localPath = path.join(cacheDir, cached.filename);
+              if (fs.existsSync(localPath)) {
+                imgUrl = "file://" + localPath;
+              }
+            }
+          } catch (_) {}
+        }
+        newObj.image = `/api/image?url=${encodeURIComponent(imgUrl)}`;
+      }
     }
     return newObj;
   }
@@ -258,6 +279,9 @@ router.post("/api/settings", async (req, res) => {
     malDiscordProfile,
     imageCacheSizeLimit,
     developerMode,
+    autoSkipIntro,
+    mangaReaderLayout,
+    mangaReaderWidth,
   } = req.body;
   try {
     if (
@@ -294,6 +318,9 @@ router.post("/api/settings", async (req, res) => {
       malDiscordProfile: malDiscordProfile,
       imageCacheSizeLimit: imageCacheSizeLimit,
       developerMode: developerMode,
+      autoSkipIntro: autoSkipIntro,
+      mangaReaderLayout: mangaReaderLayout,
+      mangaReaderWidth: mangaReaderWidth,
     });
 
     res.status(200).json({ message: "Settings saved successfully." });
@@ -553,11 +580,66 @@ router.post("/api/list/:AnimeManga/:provider/", async (req, res) => {
   }
 });
 
+router.get("/api/schedule/weekly", async (req, res) => {
+  try {
+    const now = Math.floor(Date.now() / 1000);
+    const oneWeekLater = now + 7 * 24 * 3600;
+
+    const episodes = global.db
+      .prepare(
+        `
+        SELECT livechart_id, episode, date, title, image FROM next_episodes 
+        WHERE date >= ? AND date <= ?
+        ORDER BY date ASC
+      `,
+      )
+      .all(now, oneWeekLater);
+
+    const enriched = [];
+
+    for (const ep of episodes) {
+      let malid = null;
+      if (global.mappingDb) {
+        try {
+          const row = global.mappingDb
+            .prepare("SELECT malid FROM anime WHERE livechart_id = ?")
+            .get(ep.livechart_id);
+          if (row && row.malid) {
+            malid = row.malid;
+          }
+        } catch (dbErr) {
+          console.error("Database error in schedule mapping lookup:", dbErr);
+        }
+      }
+
+      if (malid) {
+        enriched.push({
+          ...ep,
+          malid,
+          title: ep.title || `MAL ${malid}`,
+          image: ep.image || "",
+        });
+      }
+    }
+
+    res.json({
+      results: enriched,
+      updating: !!global.livechart_updating,
+    });
+  } catch (err) {
+    logger.error(`Error in /api/schedule/weekly: ${err.message}`);
+    res.status(500).json({ error: true, message: err.message });
+  }
+});
+
 // Fetches Anime / Manga Info
 router.post("/api/info/:AnimeManga/:LocalMalProvider", async (req, res) => {
   const { AnimeManga } = req.params;
   let { LocalMalProvider } = req.params;
   let { id } = req.body;
+  if (id !== undefined && id !== null) {
+    id = String(id);
+  }
 
   const data = {
     MalLoggedIn: !!global?.MalLoggedIn,
@@ -734,6 +816,95 @@ router.post("/api/info/:AnimeManga/:LocalMalProvider", async (req, res) => {
           data.malid = resolvedMalId;
         } else {
           throw new Error(`No ${AnimeManga} Found with id '${id}'`);
+        }
+      } else if (LocalMalProvider === "mal") {
+        let resolvedId = null;
+        let resolvedProvider = null;
+        const targetMalId = Number(id);
+
+        if (AnimeManga === "Anime") {
+          const settingProviderLower = (
+            setting.Animeprovider || "pahe"
+          ).toLowerCase();
+          const preferred = settingProviderLower.includes("anikoto")
+            ? "anikoto"
+            : settingProviderLower.includes("anineko")
+              ? "anineko"
+              : "pahe";
+
+          let rows = [];
+          try {
+            if (global.mappingDb) {
+              rows = global.mappingDb
+                .prepare(
+                  `
+                SELECT 'pahe' AS provider, id, uuid FROM animepahe WHERE malid = ?
+                UNION ALL
+                SELECT 'anikoto' AS provider, id, NULL AS uuid FROM anikototv WHERE malid = ?
+                UNION ALL
+                SELECT 'anineko' AS provider, id, NULL AS uuid FROM anineko WHERE malid = ?
+              `,
+                )
+                .all(targetMalId, targetMalId, targetMalId);
+            }
+          } catch (_) {}
+
+          const match = rows.find((r) => r.provider === preferred) || rows[0];
+          if (match) {
+            resolvedId = match.uuid || match.id;
+            resolvedProvider = match.provider;
+          }
+        } else if (AnimeManga === "Manga") {
+          const settingProviderLower = (
+            setting.Mangaprovider || "weebcentral"
+          ).toLowerCase();
+          const preferred = settingProviderLower.includes("allmanga")
+            ? "allmanga"
+            : "weebcentral";
+
+          let rows = [];
+          try {
+            if (global.mappingDb) {
+              rows = global.mappingDb
+                .prepare(
+                  `
+                SELECT 'weebcentral' AS provider, id FROM weebcentral WHERE malid = ?
+                UNION ALL
+                SELECT 'allmanga' AS provider, id FROM allmanga WHERE malid = ?
+              `,
+                )
+                .all(targetMalId, targetMalId);
+            }
+          } catch (_) {}
+
+          const match = rows.find((r) => r.provider === preferred) || rows[0];
+          if (match) {
+            resolvedId = match.id;
+            resolvedProvider = match.provider;
+          }
+        }
+
+        if (resolvedId && resolvedProvider) {
+          if (resolvedProvider === "pahe") {
+            if (
+              !resolvedId.endsWith("-sub") &&
+              !resolvedId.endsWith("-dub") &&
+              !resolvedId.endsWith("-hsub") &&
+              !resolvedId.endsWith("-both")
+            ) {
+              resolvedId = resolvedId + "-sub";
+            }
+          }
+          id = resolvedId;
+          LocalMalProvider = resolvedProvider;
+          provider = resolvedProvider;
+          data.id = resolvedId;
+          data.provider = resolvedProvider;
+          data.malid = targetMalId;
+        } else {
+          throw new Error(
+            `This ${AnimeManga.toLowerCase()} is not mapped to any provider yet.`,
+          );
         }
       }
     }
@@ -1554,6 +1725,10 @@ router.post("/api/watch", async (req, res) => {
       // subtitles
       if (SourcesData?.subtitleFiles?.length > 0) {
         videoData.subtitles = SourcesData?.subtitleFiles;
+      }
+
+      if (SourcesData?.skipTimes) {
+        videoData.skipTimes = SourcesData.skipTimes;
       }
 
       res.status(200).json(videoData);

@@ -39,6 +39,9 @@ export default function SettingsView({
   const [malUsername, setMalUsername] = useState(null);
   const [imageCacheSizeLimit, setImageCacheSizeLimit] = useState(5);
   const [developerMode, setDeveloperMode] = useState("off");
+  const [autoSkipIntro, setAutoSkipIntro] = useState("on");
+  const [mangaReaderLayout, setMangaReaderLayout] = useState("long-strip");
+  const [mangaReaderWidth, setMangaReaderWidth] = useState(800);
   const [cacheStats, setCacheStats] = useState(null);
   const [clearingCache, setClearingCache] = useState(false);
 
@@ -244,6 +247,20 @@ export default function SettingsView({
       setMalUsername(data.malUsername || null);
       setImageCacheSizeLimit(s.imageCacheSizeLimit || 5);
       setDeveloperMode(s.developerMode || "off");
+      const skipVal = s.autoSkipIntro || "on";
+      setAutoSkipIntro(skipVal);
+      localStorage.setItem(
+        "player-auto-skip",
+        skipVal === "on" ? "true" : "false",
+      );
+
+      const layoutVal = s.mangaReaderLayout || "long-strip";
+      setMangaReaderLayout(layoutVal);
+      localStorage.setItem("manga_reader_layout", layoutVal);
+
+      const widthVal = parseInt(s.mangaReaderWidth, 10) || 800;
+      setMangaReaderWidth(widthVal);
+      localStorage.setItem("manga_reader_width", widthVal);
 
       setHasChanges(false);
     } catch (err) {
@@ -390,6 +407,9 @@ export default function SettingsView({
           malDiscordProfile: malDiscordProfile,
           imageCacheSizeLimit: finalLimit,
           developerMode: developerMode,
+          autoSkipIntro: autoSkipIntro,
+          mangaReaderLayout: mangaReaderLayout,
+          mangaReaderWidth: mangaReaderWidth,
         }),
       });
       const data = await response.json();
@@ -410,7 +430,16 @@ export default function SettingsView({
           malDiscordProfile: malDiscordProfile,
           imageCacheSizeLimit: finalLimit,
           developerMode: developerMode,
+          autoSkipIntro: autoSkipIntro,
+          mangaReaderLayout: mangaReaderLayout,
+          mangaReaderWidth: mangaReaderWidth,
         });
+        localStorage.setItem(
+          "player-auto-skip",
+          autoSkipIntro === "on" ? "true" : "false",
+        );
+        localStorage.setItem("manga_reader_layout", mangaReaderLayout);
+        localStorage.setItem("manga_reader_width", mangaReaderWidth);
         if (onSettingsSaved) onSettingsSaved();
       } else if (data.error) {
         Swal.fire({
@@ -451,6 +480,9 @@ export default function SettingsView({
       subtitleFormat !== (settings.subtitleFormat || "vtt") ||
       malDiscordProfile !== (settings.malDiscordProfile || "off") ||
       developerMode !== (settings.developerMode || "off") ||
+      autoSkipIntro !== (settings.autoSkipIntro || "on") ||
+      mangaReaderLayout !== (settings.mangaReaderLayout || "long-strip") ||
+      mangaReaderWidth !== (parseInt(settings.mangaReaderWidth, 10) || 800) ||
       (isValidLimit && finalLimit !== (settings.imageCacheSizeLimit || 5));
 
     setHasChanges(changed);
@@ -475,6 +507,9 @@ export default function SettingsView({
     malDiscordProfile,
     imageCacheSizeLimit,
     developerMode,
+    autoSkipIntro,
+    mangaReaderLayout,
+    mangaReaderWidth,
     settings,
   ]);
 
@@ -961,6 +996,28 @@ export default function SettingsView({
                 <div className="settings-row-item">
                   <div className="settings-row-info">
                     <div className="settings-row-label">
+                      Auto-Skip Intro & Outro
+                    </div>
+                    <div className="settings-row-hint">
+                      Automatically skip intro and outro segments during
+                      playback when detected.
+                    </div>
+                  </div>
+                  <div className="settings-row-control">
+                    <select
+                      value={autoSkipIntro}
+                      onChange={(e) => setAutoSkipIntro(e.target.value)}
+                      className="settings-select"
+                    >
+                      <option value="on">Yes</option>
+                      <option value="off">No</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="settings-row-item">
+                  <div className="settings-row-info">
+                    <div className="settings-row-label">
                       Merge Soft Subtitles
                     </div>
                     <div className="settings-row-hint">
@@ -1049,6 +1106,66 @@ export default function SettingsView({
                         </option>
                       ))}
                     </select>
+                  </div>
+                </div>
+
+                <div className="settings-row-item">
+                  <div className="settings-row-info">
+                    <div className="settings-row-label">
+                      Manga Reader Layout
+                    </div>
+                    <div className="settings-row-hint">
+                      Choose how pages are laid out inside the manga reader.
+                    </div>
+                  </div>
+                  <div className="settings-row-control">
+                    <select
+                      value={mangaReaderLayout}
+                      onChange={(e) => setMangaReaderLayout(e.target.value)}
+                      className="settings-select"
+                    >
+                      <option value="long-strip">
+                        Long Strip (Vertical Scroll)
+                      </option>
+                      <option value="single">Single Page</option>
+                      <option value="double">Double Page</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="settings-row-item">
+                  <div className="settings-row-info">
+                    <div className="settings-row-label">
+                      Manga Reader Width ({mangaReaderWidth}px)
+                    </div>
+                    <div className="settings-row-hint">
+                      Adjust the maximum page display width inside the manga
+                      reader.
+                    </div>
+                  </div>
+                  <div
+                    className="settings-row-control"
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "10px",
+                    }}
+                  >
+                    <input
+                      type="range"
+                      min="400"
+                      max="1600"
+                      step="20"
+                      value={mangaReaderWidth}
+                      onChange={(e) =>
+                        setMangaReaderWidth(parseInt(e.target.value, 10))
+                      }
+                      className="settings-range-slider"
+                      style={{
+                        accentColor: "var(--accent)",
+                        cursor: "pointer",
+                      }}
+                    />
                   </div>
                 </div>
 
@@ -1318,7 +1435,13 @@ export default function SettingsView({
                         paddingBottom: "12px",
                       }}
                     >
-                      <div style={{ display: "flex", alignItems: "center", gap: "20px" }}>
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "20px",
+                        }}
+                      >
                         <h2
                           className="settings-panel-title"
                           style={{
@@ -1329,7 +1452,7 @@ export default function SettingsView({
                         >
                           Recent Activity History
                         </h2>
-                        
+
                         {/* Segmented Toggle Control */}
                         <div
                           className="market-tabs-wrapper"
@@ -1349,9 +1472,15 @@ export default function SettingsView({
                               onClick={() => setHistoryFilter(t)}
                               className={`market-tab-btn ${historyFilter === t ? "active" : ""}`}
                               style={{
-                                backgroundColor: historyFilter === t ? "var(--accent)" : "transparent",
+                                backgroundColor:
+                                  historyFilter === t
+                                    ? "var(--accent)"
+                                    : "transparent",
                                 border: "none",
-                                color: historyFilter === t ? "white" : "var(--text-muted)",
+                                color:
+                                  historyFilter === t
+                                    ? "white"
+                                    : "var(--text-muted)",
                                 padding: "4px 12px",
                                 borderRadius: "16px",
                                 fontSize: "12px",

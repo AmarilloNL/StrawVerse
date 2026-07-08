@@ -21,6 +21,7 @@ async function getWeeklyDates(weeks) {
 }
 
 async function LiveChartSchedule() {
+  global.livechart_updating = true;
   try {
     let WeeksToExtract = await getWeeklyDates(5);
     let Schedule = [];
@@ -88,11 +89,41 @@ async function LiveChartSchedule() {
 
             if (!MalId) return null;
 
+            let title =
+              $(ele)
+                .find(".anime-title, .anime-card-title, h3, h4")
+                .first()
+                ?.text()
+                ?.trim() || "";
+            if (!title) {
+              $(ele)
+                .find("a")
+                .each((idx, a) => {
+                  const text = $(a).text()?.trim();
+                  if (
+                    text &&
+                    !text.includes("MyAnimeList") &&
+                    !text.includes("Official Site")
+                  ) {
+                    title = text;
+                    return false;
+                  }
+                });
+            }
+
+            let imgEle = $(ele).find("img").first();
+            let image = imgEle?.attr("src") || imgEle?.attr("data-src") || "";
+            if (image && image.startsWith("//")) {
+              image = "https:" + image;
+            }
+
             return {
               Episode: EP,
               date: date,
               MalId: parseInt(MalId),
               livechart_id: livechart_id,
+              title: title,
+              image: image,
             };
           })
           .get()
@@ -132,18 +163,17 @@ async function LiveChartSchedule() {
       `);
 
       const insertEpisode = global.db.prepare(`
-        INSERT INTO next_episodes (livechart_id, episode, date)
-        VALUES (?, ?, ?)
+        INSERT INTO next_episodes (livechart_id, episode, date, title, image)
+        VALUES (?, ?, ?, ?, ?)
       `);
 
       const updateEpisode = global.db.prepare(`
-        UPDATE next_episodes SET date = ?
+        UPDATE next_episodes SET date = ?, title = ?, image = ?
         WHERE livechart_id = ? AND episode = ?
       `);
 
       global.mappingDb.exec("BEGIN");
       global.db.exec("BEGIN");
-
       try {
         for (const element of Schedule) {
           try {
@@ -164,10 +194,14 @@ async function LiveChartSchedule() {
                 element.livechart_id,
                 element.Episode,
                 element.date,
+                element.title,
+                element.image,
               );
-            } else if (existingEp.date !== element.date) {
+            } else {
               updateEpisode.run(
                 element.date,
+                element.title,
+                element.image,
                 element.livechart_id,
                 element.Episode,
               );
@@ -195,6 +229,8 @@ async function LiveChartSchedule() {
     }
   } catch (err) {
     logger.error(`[livechart] Error: ${err.message}`);
+  } finally {
+    global.livechart_updating = false;
   }
 }
 
@@ -209,8 +245,13 @@ async function runLiveChartScheduleIfNeeded() {
       await LiveChartSchedule();
       setKeyValue("Settings", lastRunKey, Date.now());
     } else {
-      const daysLeft = ((oneWeekMs - (Date.now() - Number(lastRun))) / (24 * 60 * 60 * 1000)).toFixed(1);
-      logger.info(`[livechart] Weekly LiveChart schedule update skipped (last run was ${daysLeft} days ago).`);
+      const daysLeft = (
+        (oneWeekMs - (Date.now() - Number(lastRun))) /
+        (24 * 60 * 60 * 1000)
+      ).toFixed(1);
+      logger.info(
+        `[livechart] Weekly LiveChart schedule update skipped (last run was ${daysLeft} days ago).`,
+      );
     }
   } catch (err) {
     logger.error(`[livechart] Error checking/running schedule: ${err.message}`);

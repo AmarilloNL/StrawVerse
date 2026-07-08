@@ -182,7 +182,7 @@
 }
 
 .player-nav-btn:disabled {
-  background-color: rgba(255,255,255,0.02);
+  background-color: rgba(255, 255, 255, 0.02);
   color: #4b5563;
   cursor: not-allowed;
 }
@@ -261,7 +261,11 @@
   left: 0;
   right: 0;
   z-index: 100;
-  background: linear-gradient(to bottom, rgba(0, 0, 0, 0.85) 0%, rgba(0, 0, 0, 0) 100%);
+  background: linear-gradient(
+    to bottom,
+    rgba(0, 0, 0, 0.85) 0%,
+    rgba(0, 0, 0, 0) 100%
+  );
   padding: 24px 32px;
   margin-bottom: 0;
 }
@@ -272,7 +276,11 @@
   left: 0;
   right: 0;
   z-index: 100;
-  background: linear-gradient(to top, rgba(0, 0, 0, 0.85) 0%, rgba(0, 0, 0, 0) 100%);
+  background: linear-gradient(
+    to top,
+    rgba(0, 0, 0, 0.85) 0%,
+    rgba(0, 0, 0, 0) 100%
+  );
   padding: 24px 32px;
   margin-top: 0;
 }
@@ -315,7 +323,9 @@
   z-index: 200;
   box-shadow: 0 15px 30px rgba(0, 0, 0, 0.65);
   opacity: 0;
-  transition: opacity 150ms cubic-bezier(0.25, 1, 0.5, 1), transform 150ms cubic-bezier(0.25, 1, 0.5, 1);
+  transition:
+    opacity 150ms cubic-bezier(0.25, 1, 0.5, 1),
+    transform 150ms cubic-bezier(0.25, 1, 0.5, 1);
 }
 
 .player-indicator-overlay.visible {
@@ -357,12 +367,19 @@ video::-webkit-media-controls-fullscreen-button {
   left: 0;
   right: 0;
   z-index: 50;
-  background: linear-gradient(to top, rgba(0, 0, 0, 0.9) 0%, rgba(0, 0, 0, 0.5) 60%, rgba(0, 0, 0, 0) 100%);
+  background: linear-gradient(
+    to top,
+    rgba(0, 0, 0, 0.9) 0%,
+    rgba(0, 0, 0, 0.5) 60%,
+    rgba(0, 0, 0, 0) 100%
+  );
   padding: 24px 20px 24px 20px;
   display: flex;
   flex-direction: column;
   gap: 14px;
-  transition: opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1), transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transition:
+    opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+    transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   pointer-events: auto;
 }
 
@@ -389,7 +406,9 @@ video::-webkit-media-controls-fullscreen-button {
   height: 6px;
   border-radius: 3px;
   outline: none;
-  transition: height 0.15s ease, box-shadow 0.15s ease;
+  transition:
+    height 0.15s ease,
+    box-shadow 0.15s ease;
   cursor: pointer;
   background: linear-gradient(
     to right,
@@ -467,7 +486,10 @@ video::-webkit-media-controls-fullscreen-button {
   justify-content: center;
   padding: 6px;
   border-radius: 6px;
-  transition: color 0.2s ease, background-color 0.2s ease, transform 0.1s ease;
+  transition:
+    color 0.2s ease,
+    background-color 0.2s ease,
+    transform 0.1s ease;
 }
 
 .player-control-btn:hover {
@@ -488,7 +510,7 @@ video::-webkit-media-controls-fullscreen-button {
   font-size: 13px;
   font-weight: 500;
   color: #e5e7eb;
-  font-family: 'Outfit', sans-serif;
+  font-family: "Outfit", sans-serif;
   user-select: none;
 }
 
@@ -516,7 +538,9 @@ video::-webkit-media-controls-fullscreen-button {
   border-radius: 2px;
   outline: none;
   opacity: 0;
-  transition: width 0.2s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.2s ease;
+  transition:
+    width 0.2s cubic-bezier(0.4, 0, 0.2, 1),
+    opacity 0.2s ease;
   cursor: pointer;
   background: linear-gradient(
     to right,
@@ -610,7 +634,9 @@ video::-webkit-media-controls-fullscreen-button {
   width: 100%;
   text-align: left;
   font-family: inherit;
-  transition: background-color 0.15s ease, color 0.15s ease;
+  transition:
+    background-color 0.15s ease,
+    color 0.15s ease;
 }
 
 .settings-menu-item:hover {
@@ -682,7 +708,9 @@ video::-webkit-media-controls-fullscreen-button {
   width: 100%;
   text-align: left;
   font-family: inherit;
-  transition: background-color 0.15s ease, color 0.15s ease;
+  transition:
+    background-color 0.15s ease,
+    color 0.15s ease;
 }
 
 .settings-menu-option-item:hover {
@@ -732,8 +760,14 @@ video::-webkit-media-controls-fullscreen-button {
   justify-content: center;
   cursor: pointer;
   z-index: 10;
-  transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275), background-color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6), inset 0 0 12px rgba(255, 255, 255, 0.05);
+  transition:
+    transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275),
+    background-color 0.2s ease,
+    border-color 0.2s ease,
+    box-shadow 0.2s ease;
+  box-shadow:
+    0 8px 24px rgba(0, 0, 0, 0.6),
+    inset 0 0 12px rgba(255, 255, 255, 0.05);
   padding-left: 4px; /* visually center the play triangle */
 }
 
@@ -748,5 +782,216 @@ video::-webkit-media-controls-fullscreen-button {
   transform: translate(-50%, -50%) scale(0.95);
 }
 
+/* Picture-in-Picture Active Style */
+.player-control-btn.active {
+  color: var(--accent, #7c3aed);
+}
 
+/* AniSkip Manual Skip Button */
+.player-skip-button {
+  position: absolute;
+  bottom: 120px;
+  right: 24px;
+  z-index: 60;
+  background-color: var(--accent, #7c3aed);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: white;
+  padding: 10px 20px;
+  border-radius: 8px;
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.45);
+  animation: skipButtonFadeIn 0.3s ease;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.2s ease;
+}
 
+@keyframes skipButtonFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.player-skip-button:hover {
+  background-color: var(--accent-hover, #6d28d9);
+  transform: scale(1.05);
+}
+
+/* trace.moe Scene Finder Panel */
+.scene-finder-panel {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 320px;
+  background-color: rgba(10, 10, 12, 0.96);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border-left: 1px solid rgba(255, 255, 255, 0.08);
+  display: flex;
+  flex-direction: column;
+  z-index: 110;
+  box-shadow: -10px 0 30px rgba(0, 0, 0, 0.5);
+  animation: sceneFinderSlideIn 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes sceneFinderSlideIn {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+.scene-finder-header {
+  padding: 16px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.scene-finder-header h3 {
+  font-size: 15px;
+  font-weight: 700;
+  margin: 0;
+  color: white;
+}
+
+.scene-finder-close {
+  background: none;
+  border: none;
+  color: var(--text-muted, #9ca3af);
+  font-size: 22px;
+  cursor: pointer;
+  transition: color 0.15s ease;
+  line-height: 1;
+  padding: 0;
+}
+
+.scene-finder-close:hover {
+  color: white;
+}
+
+.scene-finder-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px 20px;
+}
+
+.scene-finder-body::-webkit-scrollbar {
+  width: 4px;
+}
+
+.scene-finder-body::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 2px;
+}
+
+.scene-finder-loading,
+.scene-finder-error,
+.scene-finder-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 200px;
+  text-align: center;
+  color: var(--text-muted, #9ca3af);
+}
+
+.scene-finder-loading p,
+.scene-finder-error p,
+.scene-finder-empty p {
+  font-size: 13px;
+  margin-top: 12px;
+}
+
+.scene-finder-error span {
+  font-size: 28px;
+}
+
+.scene-finder-results-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.scene-result-item {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 8px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  transition: border-color 0.2s ease;
+}
+
+.scene-result-item:hover {
+  border-color: var(--accent, #7c3aed);
+}
+
+.scene-preview-container {
+  width: 100%;
+  padding-bottom: 56.25%; /* 16:9 Aspect Ratio */
+  position: relative;
+  background-color: black;
+  overflow: hidden;
+}
+
+.scene-preview-video {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.scene-result-details {
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.scene-result-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: white;
+  margin: 0;
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.scene-result-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--text-muted, #9ca3af);
+  font-weight: 500;
+}
+
+.scene-match-badge {
+  background-color: rgba(52, 211, 153, 0.15);
+  color: #34d399;
+  border: 1px solid rgba(52, 211, 153, 0.25);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-weight: 600;
+  margin-left: auto;
+}

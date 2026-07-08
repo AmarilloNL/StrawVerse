@@ -86,13 +86,40 @@ export default function MangaReader({
   const [isCurrentDownloaded, setIsCurrentDownloaded] = useState(isDownloaded);
   const [activeChapterInView, setActiveChapterInView] = useState(null);
   const [autoLoadNext, setAutoLoadNext] = useState(true);
-  const [readerSize, setReaderSize] = useState(
-    () => localStorage.getItem("manga_reader_size") || "standard",
+  const [readerWidth, setReaderWidth] = useState(
+    () => parseInt(localStorage.getItem("manga_reader_width"), 10) || 800,
   );
+  const [readerLayout, setReaderLayout] = useState(
+    () => localStorage.getItem("manga_reader_layout") || "long-strip",
+  );
+  const [readerDirection, setReaderDirection] = useState(
+    () => localStorage.getItem("manga_reader_direction") || "rtl",
+  );
+  const [activeItemIndex, setActiveItemIndex] = useState(0);
 
-  const handleSizeChange = (newSize) => {
-    setReaderSize(newSize);
-    localStorage.setItem("manga_reader_size", newSize);
+  const saveWidthTimeoutRef = useRef(null);
+  const saveReaderWidthToSettings = (val) => {
+    if (saveWidthTimeoutRef.current) {
+      clearTimeout(saveWidthTimeoutRef.current);
+    }
+    saveWidthTimeoutRef.current = setTimeout(async () => {
+      try {
+        const getRes = await fetch("/api/settings");
+        const data = await getRes.json();
+        const currentSettings = data?.settings || {};
+
+        await fetch("/api/settings", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            ...currentSettings,
+            mangaReaderWidth: val,
+          }),
+        });
+      } catch (err) {
+        console.error("Failed to save reader width:", err);
+      }
+    }, 500);
   };
 
   const isTransitioningRef = useRef(false);
@@ -103,8 +130,20 @@ export default function MangaReader({
       try {
         const response = await fetch("/api/settings");
         const data = await response.json();
-        if (data && data.autoLoadNextChapter) {
-          setAutoLoadNext(data.autoLoadNextChapter === "on");
+        const s = data?.settings || data;
+        if (s) {
+          if (s.autoLoadNextChapter) {
+            setAutoLoadNext(s.autoLoadNextChapter === "on");
+          }
+          if (s.mangaReaderLayout) {
+            setReaderLayout(s.mangaReaderLayout);
+            localStorage.setItem("manga_reader_layout", s.mangaReaderLayout);
+          }
+          if (s.mangaReaderWidth) {
+            const widthVal = parseInt(s.mangaReaderWidth, 10);
+            setReaderWidth(widthVal);
+            localStorage.setItem("manga_reader_width", widthVal);
+          }
         }
       } catch (err) {
         console.error("Failed to fetch settings:", err);
@@ -190,6 +229,325 @@ export default function MangaReader({
     if (nextIndex !== -1) {
       handleJumpToChapter(sortedChapters[nextIndex]);
     }
+  };
+
+  const handlePageNext = () => {
+    if (readerLayout === "long-strip") return;
+
+    let step = 1;
+    if (readerLayout === "double") {
+      const currentItem = items[activeItemIndex];
+      if (currentItem && currentItem.type === "page") {
+        const nextItem = items[activeItemIndex + 1];
+        if (
+          nextItem &&
+          nextItem.type === "page" &&
+          nextItem.chapterId === currentItem.chapterId
+        ) {
+          step = 2;
+        }
+      }
+    }
+
+    const targetIndex = activeItemIndex + step;
+    if (targetIndex < items.length) {
+      setActiveItemIndex(targetIndex);
+    } else {
+      if (nextIndex !== -1) {
+        const nextChapterObj = sortedChapters[nextIndex];
+        if (!loadedChapters.includes(nextChapterObj.id)) {
+          isTransitioningRef.current = true;
+          fetchChapterPages(nextChapterObj, true);
+        }
+      }
+    }
+  };
+
+  const handlePagePrev = () => {
+    if (readerLayout === "long-strip") return;
+
+    let step = 1;
+    if (readerLayout === "double" && activeItemIndex > 0) {
+      const prevItem = items[activeItemIndex - 1];
+      const prevPrevItem = items[activeItemIndex - 2];
+      if (
+        prevItem &&
+        prevItem.type === "page" &&
+        prevPrevItem &&
+        prevPrevItem.type === "page" &&
+        prevPrevItem.chapterId === prevItem.chapterId
+      ) {
+        step = 2;
+      }
+    }
+
+    const targetIndex = activeItemIndex - step;
+    if (targetIndex >= 0) {
+      setActiveItemIndex(targetIndex);
+    } else {
+      if (prevIndex !== -1) {
+        handlePrevChapter();
+      }
+    }
+  };
+
+  const handleViewportClick = (e) => {
+    const selection = window.getSelection();
+    if (selection && selection.toString().length > 0) {
+      return;
+    }
+
+    if (
+      e.target.tagName === "BUTTON" ||
+      e.target.tagName === "SELECT" ||
+      e.target.tagName === "INPUT" ||
+      e.target.tagName === "A" ||
+      e.target.closest("button") ||
+      e.target.closest("a") ||
+      e.target.closest(".header-nav") ||
+      e.target.closest(".bottom-controls-panel") ||
+      e.target.closest(".append-loading-container")
+    ) {
+      return;
+    }
+
+    const rect = e.currentTarget.getBoundingClientRect();
+    const clickX = e.clientX - rect.left;
+    const clickY = e.clientY - rect.top;
+    const width = rect.width;
+    const height = rect.height;
+
+    if (readerLayout === "long-strip") {
+      const isUpperHalf = e.clientY < window.innerHeight / 2;
+      const wrapper = document.querySelector(".reader-wrapper");
+      if (wrapper) {
+        const scrollAmount = window.innerHeight * 0.8;
+        wrapper.scrollBy({
+          top: isUpperHalf ? -scrollAmount : scrollAmount,
+          behavior: "smooth",
+        });
+      }
+    } else {
+      const isLeftClick = clickX < width / 2;
+      if (isLeftClick) {
+        handlePagePrev();
+      } else {
+        handlePageNext();
+      }
+    }
+  };
+
+  useEffect(() => {
+    if (readerLayout === "long-strip") {
+      const idx = items.findIndex(
+        (item) =>
+          item.chapterId === activeChapterInView &&
+          (item.type === "header"
+            ? activePage === 1
+            : item.page === activePage),
+      );
+      if (idx !== -1) {
+        setActiveItemIndex(idx);
+      }
+    }
+  }, [activePage, activeChapterInView, items, readerLayout]);
+
+  useEffect(() => {
+    if (readerLayout !== "long-strip" && items[activeItemIndex]) {
+      const currentItem = items[activeItemIndex];
+      setActiveChapterInView(currentItem.chapterId);
+      activeChapterRef.current = currentItem.chapterId;
+      const targetObj = sortedChapters.find(
+        (item) => item.id === currentItem.chapterId,
+      );
+      if (targetObj) {
+        setIsCurrentDownloaded(isChDownloaded(targetObj.number));
+      }
+
+      const newPageVal = currentItem.type === "header" ? 1 : currentItem.page;
+      if (newPageVal !== activePageRef.current) {
+        activePageRef.current = newPageVal;
+        setActivePage(newPageVal);
+      }
+    }
+  }, [activeItemIndex, readerLayout, items]);
+
+  const prevItemsLengthRef = useRef(0);
+  useEffect(() => {
+    if (
+      readerLayout !== "long-strip" &&
+      items.length > prevItemsLengthRef.current
+    ) {
+      if (
+        activeItemIndex === prevItemsLengthRef.current - 1 &&
+        prevItemsLengthRef.current > 0
+      ) {
+        setActiveItemIndex(prevItemsLengthRef.current);
+      }
+    }
+    prevItemsLengthRef.current = items.length;
+  }, [items, readerLayout, activeItemIndex]);
+
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (readerLayout === "long-strip") return;
+
+      const active = document.activeElement;
+      if (
+        active &&
+        (active.tagName === "INPUT" ||
+          active.tagName === "TEXTAREA" ||
+          active.tagName === "SELECT" ||
+          active.isContentEditable)
+      ) {
+        return;
+      }
+
+      if (e.key === "ArrowRight") {
+        e.preventDefault();
+        handlePageNext();
+      } else if (e.key === "ArrowLeft") {
+        e.preventDefault();
+        handlePagePrev();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [
+    readerLayout,
+    readerDirection,
+    activeItemIndex,
+    items,
+    nextIndex,
+    prevIndex,
+  ]);
+
+  const renderSingleOrDoublePage = () => {
+    const currentItem = items[activeItemIndex];
+    if (!currentItem) return null;
+
+    if (currentItem.type === "header") {
+      return (
+        <div
+          key={currentItem.id}
+          data-chapter={currentItem.chapterId}
+          className="splash-card"
+          style={{ marginBottom: 0 }}
+        >
+          <div className="splash-card-overlay" />
+          <div className="splash-card-content">
+            <span className="splash-manga-title">
+              {mangaTitle || id || "Manga Stream"}
+            </span>
+            <h1 className="splash-chapter-num">
+              Chapter{" "}
+              {getCleanChapterNum(
+                currentItem.chapterId,
+                currentItem.chapterNum,
+              )}
+            </h1>
+            <div
+              className={`splash-status-badge ${currentItem.isDownloaded ? "local" : "online"}`}
+            >
+              {currentItem.isDownloaded ? (
+                <HardDrive size={13} />
+              ) : (
+                <Globe size={13} />
+              )}
+              <span>
+                {currentItem.isDownloaded
+                  ? "Downloaded Chapter"
+                  : "Online Stream"}
+              </span>
+            </div>
+
+            <div
+              className="splash-chevron splash-scroll-hint"
+              style={{ flexDirection: "column", gap: "6px" }}
+            >
+              <span>PRESS RIGHT ARROW OR CLICK RIGHT SIDE TO READ</span>
+              <span style={{ fontSize: "11px", opacity: 0.6 }}>
+                PRESS LEFT ARROW OR CLICK LEFT SIDE TO GO BACK
+              </span>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    if (readerLayout === "single") {
+      return (
+        <div
+          key={currentItem.id}
+          data-chapter={currentItem.chapterId}
+          data-page={currentItem.page}
+          className="page-wrapper single-page-mode"
+        >
+          <LazyMangaPage
+            src={currentItem.img}
+            alt={`Page ${currentItem.page}`}
+            shouldLoad={true}
+          />
+          <div className="page-num" style={{ color: "#9ca3af" }}>
+            Page {currentItem.page}
+          </div>
+        </div>
+      );
+    }
+
+    const page1 = currentItem;
+    let page2 = null;
+    const nextItem = items[activeItemIndex + 1];
+    if (
+      nextItem &&
+      nextItem.type === "page" &&
+      nextItem.chapterId === page1.chapterId
+    ) {
+      page2 = nextItem;
+    }
+
+    return (
+      <div
+        className={`double-page-container ${readerDirection === "rtl" ? "rtl-mode" : "ltr-mode"}`}
+      >
+        <div
+          key={page1.id}
+          data-chapter={page1.chapterId}
+          data-page={page1.page}
+          className="page-wrapper double-page-half"
+        >
+          <LazyMangaPage
+            src={page1.img}
+            alt={`Page ${page1.page}`}
+            shouldLoad={true}
+          />
+          <div className="page-num" style={{ color: "#9ca3af" }}>
+            Page {page1.page}
+          </div>
+        </div>
+
+        {page2 && (
+          <div
+            key={page2.id}
+            data-chapter={page2.chapterId}
+            data-page={page2.page}
+            className="page-wrapper double-page-half"
+          >
+            <LazyMangaPage
+              src={page2.img}
+              alt={`Page ${page2.page}`}
+              shouldLoad={true}
+            />
+            <div className="page-num" style={{ color: "#9ca3af" }}>
+              Page {page2.page}
+            </div>
+          </div>
+        )}
+      </div>
+    );
   };
 
   // History Tracking Ref & Logic
@@ -406,6 +764,7 @@ export default function MangaReader({
           if (containerRef.current) {
             containerRef.current.scrollTop = 0;
           }
+          setActiveItemIndex(0);
         }
       } else {
         if (!isAppend) {
@@ -583,6 +942,13 @@ export default function MangaReader({
                     (item) => item.id === e.target.value,
                   );
                   if (selected) handleJumpToChapter(selected);
+                  e.target.blur();
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
+                    e.preventDefault();
+                    e.target.blur();
+                  }
                 }}
                 className="select-nav"
               >
@@ -607,37 +973,44 @@ export default function MangaReader({
         )}
 
         <div className="header-right-section">
-          <div className="reader-size-controls">
-            <button
-              onClick={() =>
-                handleSizeChange(
-                  readerSize === "compact" ? "standard" : "compact",
-                )
-              }
-              className={`btn-reader-size ${readerSize === "compact" ? "active" : ""}`}
-              title={
-                readerSize === "compact"
-                  ? "Reset to Standard Size"
-                  : "Minimize / Compact Reader Width"
-              }
+          <div
+            className="reader-size-controls"
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "10px",
+              marginRight: "12px",
+            }}
+          >
+            <span
+              style={{
+                fontSize: "12px",
+                color: "var(--text-muted)",
+                fontWeight: "600",
+                whiteSpace: "nowrap",
+              }}
             >
-              <Minimize2 size={15} />
-              <span className="btn-size-label">Minimize</span>
-            </button>
-            <button
-              onClick={() =>
-                handleSizeChange(readerSize === "full" ? "standard" : "full")
-              }
-              className={`btn-reader-size ${readerSize === "full" ? "active" : ""}`}
-              title={
-                readerSize === "full"
-                  ? "Reset to Standard Size"
-                  : "Maximize / Full Reader Width"
-              }
-            >
-              <Maximize2 size={15} />
-              <span className="btn-size-label">Maximize</span>
-            </button>
+              Width: {readerWidth}px
+            </span>
+            <input
+              type="range"
+              min="400"
+              max="1600"
+              step="20"
+              value={readerWidth}
+              onChange={(e) => {
+                const val = parseInt(e.target.value, 10);
+                setReaderWidth(val);
+                localStorage.setItem("manga_reader_width", val);
+                saveReaderWidthToSettings(val);
+              }}
+              style={{
+                width: "90px",
+                accentColor: "var(--accent)",
+                cursor: "pointer",
+                height: "6px",
+              }}
+            />
           </div>
 
           <span className="chapter-title" title={mangaTitle || id}>
@@ -660,7 +1033,11 @@ export default function MangaReader({
       </div>
 
       {/* Main Pages viewport */}
-      <div className="reader-viewport">
+      <div
+        className="reader-viewport"
+        style={{ position: "relative" }}
+        onClick={handleViewportClick}
+      >
         {loading ? (
           <div className="status-overlay">
             <img
@@ -685,67 +1062,75 @@ export default function MangaReader({
             </button>
           </div>
         ) : (
-          <div className={`pages-container size-${readerSize}`}>
-            {items.map((item) => {
-              if (item.type === "header") {
-                return (
-                  <div
-                    key={item.id}
-                    data-chapter={item.chapterId}
-                    className="splash-card"
-                  >
-                    <div className="splash-card-overlay" />
-                    <div className="splash-card-content">
-                      <span className="splash-manga-title">
-                        {mangaTitle || id || "Manga Stream"}
-                      </span>
-                      <h1 className="splash-chapter-num">
-                        Chapter{" "}
-                        {getCleanChapterNum(item.chapterId, item.chapterNum)}
-                      </h1>
+          <div
+            className="pages-container"
+            style={{ maxWidth: `${readerWidth}px` }}
+          >
+            {readerLayout === "long-strip"
+              ? items.map((item) => {
+                  if (item.type === "header") {
+                    return (
                       <div
-                        className={`splash-status-badge ${item.isDownloaded ? "local" : "online"}`}
+                        key={item.id}
+                        data-chapter={item.chapterId}
+                        className="splash-card"
                       >
-                        {item.isDownloaded ? (
-                          <HardDrive size={13} />
-                        ) : (
-                          <Globe size={13} />
-                        )}
-                        <span>
-                          {item.isDownloaded
-                            ? "Downloaded Chapter"
-                            : "Online Stream"}
-                        </span>
-                      </div>
+                        <div className="splash-card-overlay" />
+                        <div className="splash-card-content">
+                          <span className="splash-manga-title">
+                            {mangaTitle || id || "Manga Stream"}
+                          </span>
+                          <h1 className="splash-chapter-num">
+                            Chapter{" "}
+                            {getCleanChapterNum(
+                              item.chapterId,
+                              item.chapterNum,
+                            )}
+                          </h1>
+                          <div
+                            className={`splash-status-badge ${item.isDownloaded ? "local" : "online"}`}
+                          >
+                            {item.isDownloaded ? (
+                              <HardDrive size={13} />
+                            ) : (
+                              <Globe size={13} />
+                            )}
+                            <span>
+                              {item.isDownloaded
+                                ? "Downloaded Chapter"
+                                : "Online Stream"}
+                            </span>
+                          </div>
 
-                      <div className="splash-chevron splash-scroll-hint">
-                        <span>SCROLL TO READ</span>
-                        <ChevronsDown size={20} />
+                          <div className="splash-chevron splash-scroll-hint">
+                            <span>SCROLL TO READ</span>
+                            <ChevronsDown size={20} />
+                          </div>
+                        </div>
                       </div>
-                    </div>
-                  </div>
-                );
-              } else {
-                const shouldLoad =
-                  item.chapterId === activeChapterInView &&
-                  Math.abs(item.page - activePage) <= 3;
-                return (
-                  <div
-                    key={item.id}
-                    data-chapter={item.chapterId}
-                    data-page={item.page}
-                    className="page-wrapper"
-                  >
-                    <LazyMangaPage
-                      src={item.img}
-                      alt={`Page ${item.page}`}
-                      shouldLoad={shouldLoad}
-                    />
-                    <div className="page-num">Page {item.page}</div>
-                  </div>
-                );
-              }
-            })}
+                    );
+                  } else {
+                    const shouldLoad =
+                      item.chapterId === activeChapterInView &&
+                      Math.abs(item.page - activePage) <= 3;
+                    return (
+                      <div
+                        key={item.id}
+                        data-chapter={item.chapterId}
+                        data-page={item.page}
+                        className="page-wrapper"
+                      >
+                        <LazyMangaPage
+                          src={item.img}
+                          alt={`Page ${item.page}`}
+                          shouldLoad={shouldLoad}
+                        />
+                        <div className="page-num">Page {item.page}</div>
+                      </div>
+                    );
+                  }
+                })
+              : renderSingleOrDoublePage()}
 
             {/* Subtle pre-fetching loading indicator at bottom */}
             {appendingLoading && (
@@ -756,51 +1141,60 @@ export default function MangaReader({
             )}
 
             {/* Bottom Navigation Controls */}
-            {sortedChapters.length > 0 && !appendingLoading && (
-              <div className="bottom-controls-panel glass-panel">
-                <p className="bottom-controls-title">
-                  You've reached the end of Chapter{" "}
-                  {getCleanChapterNum(activeChapterInView, chapterNumOrId)}
-                </p>
-                <div className="bottom-nav-row">
-                  <button
-                    onClick={handlePrevChapter}
-                    disabled={prevIndex === -1}
-                    className="btn-bottom-nav"
-                  >
-                    <ChevronLeft size={16} />
-                    <span>Previous Chapter</span>
-                  </button>
+            {readerLayout === "long-strip" &&
+              sortedChapters.length > 0 &&
+              !appendingLoading && (
+                <div className="bottom-controls-panel glass-panel">
+                  <p className="bottom-controls-title">
+                    You've reached the end of Chapter{" "}
+                    {getCleanChapterNum(activeChapterInView, chapterNumOrId)}
+                  </p>
+                  <div className="bottom-nav-row">
+                    <button
+                      onClick={handlePrevChapter}
+                      disabled={prevIndex === -1}
+                      className="btn-bottom-nav"
+                    >
+                      <ChevronLeft size={16} />
+                      <span>Previous Chapter</span>
+                    </button>
 
-                  <select
-                    value={activeChapterInView || ""}
-                    onChange={(e) => {
-                      const selected = sortedChapters.find(
-                        (item) => item.id === e.target.value,
-                      );
-                      if (selected) handleJumpToChapter(selected);
-                    }}
-                    className="bottom-nav-select"
-                  >
-                    {sortedChapters.map((item) => (
-                      <option key={item.id} value={item.id}>
-                        Chapter {item.number}
-                        {isChDownloaded(item.number) ? " (Downloaded)" : ""}
-                      </option>
-                    ))}
-                  </select>
+                    <select
+                      value={activeChapterInView || ""}
+                      onChange={(e) => {
+                        const selected = sortedChapters.find(
+                          (item) => item.id === e.target.value,
+                        );
+                        if (selected) handleJumpToChapter(selected);
+                        e.target.blur();
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
+                          e.preventDefault();
+                          e.target.blur();
+                        }
+                      }}
+                      className="bottom-nav-select"
+                    >
+                      {sortedChapters.map((item) => (
+                        <option key={item.id} value={item.id}>
+                          Chapter {item.number}
+                          {isChDownloaded(item.number) ? " (Downloaded)" : ""}
+                        </option>
+                      ))}
+                    </select>
 
-                  <button
-                    onClick={handleNextChapter}
-                    disabled={nextIndex === -1}
-                    className="btn-bottom-nav"
-                  >
-                    <span>Next Chapter</span>
-                    <ChevronRight size={16} />
-                  </button>
+                    <button
+                      onClick={handleNextChapter}
+                      disabled={nextIndex === -1}
+                      className="btn-bottom-nav"
+                    >
+                      <span>Next Chapter</span>
+                      <ChevronRight size={16} />
+                    </button>
+                  </div>
                 </div>
-              </div>
-            )}
+              )}
           </div>
         )}
       </div>

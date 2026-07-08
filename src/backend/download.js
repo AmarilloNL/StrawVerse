@@ -187,12 +187,25 @@ async function downloadAnimeSingle(
     } catch (e) {
       // ignore
     }
+    let targetMalid = malid;
+    if (!targetMalid) {
+      try {
+        const row = global.db
+          .prepare("SELECT MalID FROM Anime WHERE id = ?")
+          .get(dbId);
+        if (row && row.MalID) {
+          targetMalid = row.MalID;
+        }
+      } catch (e) {}
+    }
+
     const queueItem = {
       Type: "Anime",
       EpNum: number,
       id: dbId,
       Title: Title,
       SubDub: resolvedSubDub,
+      malid: targetMalid ? String(targetMalid) : null,
       config: {
         Animeprovider: Animeprovider?.provider_name,
         quality: config?.quality,

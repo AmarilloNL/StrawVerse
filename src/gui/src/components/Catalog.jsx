@@ -54,6 +54,15 @@ export default function Catalog({
   const [draggedIndex, setDraggedIndex] = useState(null);
   const [dragOverIndex, setDragOverIndex] = useState(null);
 
+  const [discoverTab, setDiscoverTab] = useState(
+    () => sessionStorage.getItem("discover_tab") || "latest",
+  );
+  const [scheduleData, setScheduleData] = useState([]);
+  const [calendarDayFilter, setCalendarDayFilter] = useState("Today");
+  const [calendarLoading, setCalendarLoading] = useState(false);
+  const [scheduleUpdating, setScheduleUpdating] = useState(false);
+  const [timeTicker, setTimeTicker] = useState(Date.now());
+
   const getCustomOrderKey = (currentTag = activeFilters.tag) => {
     return `${type}_${provider}_${currentTag || "all"}`;
   };
@@ -290,6 +299,11 @@ export default function Catalog({
   };
 
   useEffect(() => {
+    if (provider !== "provider" || type !== "Anime") {
+      setDiscoverTab("latest");
+      sessionStorage.setItem("discover_tab", "latest");
+    }
+
     setCurrentPage(1);
     setLinkingMalItem(null);
     setSearchQuery("");
@@ -372,6 +386,71 @@ export default function Catalog({
         .catch(() => {});
     }
   }, [type, provider]);
+
+  useEffect(() => {
+    if (
+      provider === "provider" &&
+      type === "Anime" &&
+      discoverTab === "calendar"
+    ) {
+      const fetchCalendar = async () => {
+        setCalendarLoading(true);
+        try {
+          const schedRes = await fetch("/api/schedule/weekly");
+
+          if (schedRes.ok) {
+            const sched = await schedRes.json();
+
+            if (sched && typeof sched === "object" && !Array.isArray(sched)) {
+              setScheduleData(sched.results || []);
+              setScheduleUpdating(!!sched.updating);
+            } else {
+              setScheduleData(Array.isArray(sched) ? sched : []);
+              setScheduleUpdating(false);
+            }
+          }
+        } catch (err) {
+          console.error("Failed to load schedule/seasonal calendar:", err);
+        } finally {
+          setCalendarLoading(false);
+        }
+      };
+
+      fetchCalendar();
+    }
+  }, [provider, type, discoverTab]);
+
+  useEffect(() => {
+    const ticker = setInterval(() => {
+      setTimeTicker(Date.now());
+    }, 30000);
+    return () => clearInterval(ticker);
+  }, []);
+
+  const getCountdownString = (airTimestamp) => {
+    const diffMs = airTimestamp * 1000 - timeTicker;
+    if (diffMs <= 0) return "Aired";
+
+    const totalMins = Math.floor(diffMs / 60000);
+    const days = Math.floor(totalMins / (24 * 60));
+    const hours = Math.floor((totalMins % (24 * 60)) / 60);
+    const mins = totalMins % 60;
+
+    const parts = [];
+    if (days > 0) parts.push(`${days}d`);
+    if (hours > 0) parts.push(`${hours}h`);
+    if (mins > 0 || parts.length === 0) parts.push(`${mins}m`);
+
+    return `In ${parts.join(" ")}`;
+  };
+
+  const triggerScrapeSearch = (title) => {
+    setDiscoverTab("latest");
+    sessionStorage.setItem("discover_tab", "latest");
+    const cleanTitle = title.replace(/LiveChart\s+\d+/i, "").trim();
+    setSearchQuery(cleanTitle);
+    fetchData(1, activeFilters, cleanTitle);
+  };
 
   useEffect(() => {
     const loadPaginationSettings = async () => {
@@ -593,13 +672,13 @@ export default function Catalog({
         cancelButtonColor: "var(--bg-tertiary)",
       }).then((result) => {
         if (result.isConfirmed && result.value) {
-          onSelectMedia(result.value, "provider", backText);
+          onSelectMedia(result.value, "mal", backText);
         }
       });
       return;
     }
 
-    onSelectMedia(item.id, isMalActive ? "provider" : provider, backText);
+    onSelectMedia(item.id, isMalActive ? "mal" : provider, backText);
   };
 
   const handleSearchSubmit = (e) => {
@@ -625,7 +704,6 @@ export default function Catalog({
     setCurrentPage(page);
     fetchData(page);
   };
-
 
   useEffect(() => {
     if (infiniteObserverRef.current) {
@@ -680,36 +758,64 @@ export default function Catalog({
           gap: "16px",
         }}
       >
-        <h1 className="catalog-title" style={{ margin: 0 }}>
-          {provider === "local"
-            ? "Home"
-            : provider === "mal"
-              ? `MyAnimeList`
-              : "Discover"}
-        </h1>
+        <div style={{ display: "flex", alignItems: "center" }}>
+          <h1 className="catalog-title" style={{ margin: 0 }}>
+            {provider === "local"
+              ? "Home"
+              : provider === "mal"
+                ? `MyAnimeList`
+                : "Discover"}
+          </h1>
+          {provider === "provider" && type === "Anime" && (
+            <div
+              className="discover-sub-tabs"
+              style={{ display: "flex", gap: "8px", marginLeft: "20px" }}
+            >
+              <button
+                onClick={() => {
+                  setDiscoverTab("latest");
+                  sessionStorage.setItem("discover_tab", "latest");
+                }}
+                className={`discover-sub-tab ${discoverTab === "latest" ? "active" : ""}`}
+              >
+                Latest
+              </button>
+              <button
+                onClick={() => {
+                  setDiscoverTab("calendar");
+                  sessionStorage.setItem("discover_tab", "calendar");
+                }}
+                className={`discover-sub-tab ${discoverTab === "calendar" ? "active" : ""}`}
+              >
+                Airing Calendar
+              </button>
+            </div>
+          )}
+        </div>
 
         <div
           className="search-middle-container"
           style={{ flex: 1, display: "flex", justifyContent: "center" }}
         >
-          {((provider !== "local" && provider !== "mal") || linkingMalItem) && (
-            <form
-              onSubmit={handleSearchSubmit}
-              className="search-form"
-              style={{ width: "100%", maxWidth: "450px" }}
-            >
-              <input
-                type="text"
-                placeholder={`Search ${type}...`}
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="search-input"
-              />
-              <button type="submit" className="btn-search">
-                <Search size={18} />
-              </button>
-            </form>
-          )}
+          {((provider !== "local" && provider !== "mal") || linkingMalItem) &&
+            discoverTab !== "calendar" && (
+              <form
+                onSubmit={handleSearchSubmit}
+                className="search-form"
+                style={{ width: "100%", maxWidth: "450px" }}
+              >
+                <input
+                  type="text"
+                  placeholder={`Search ${type}...`}
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="search-input"
+                />
+                <button type="submit" className="btn-search">
+                  <Search size={18} />
+                </button>
+              </form>
+            )}
         </div>
 
         <div className="market-tabs-wrapper" style={{ flexShrink: 0 }}>
@@ -938,8 +1044,290 @@ export default function Catalog({
 
       {errorMsg && <div className="error-banner">{errorMsg}</div>}
 
-      {/* Content grid */}
-      {loading ? (
+      {discoverTab === "calendar" ? (
+        calendarLoading ? (
+          <div className="loading-center-panel">
+            <img
+              src="/images/loading.gif"
+              alt="loading"
+              style={{ width: "64px", height: "64px" }}
+            />
+            <p style={{ marginTop: "16px", color: "var(--text-muted)" }}>
+              Loading calendar & airing schedule...
+            </p>
+          </div>
+        ) : (
+          <div className="calendar-view-container">
+            {/* Weekly Airing Schedule Section */}
+            <div className="calendar-section">
+              <h2 className="calendar-section-title">Weekly Airing Schedule</h2>
+              {scheduleUpdating && (
+                <div
+                  className="schedule-updating-banner"
+                  style={{
+                    marginBottom: "20px",
+                    padding: "12px 16px",
+                    backgroundColor: "rgba(168, 85, 247, 0.15)",
+                    border: "1px solid rgba(168, 85, 247, 0.3)",
+                    borderRadius: "8px",
+                    color: "#d8b4fe",
+                    fontSize: "14px",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "10px",
+                  }}
+                >
+                  <div
+                    className="pulse-dot"
+                    style={{
+                      width: "8px",
+                      height: "8px",
+                      borderRadius: "50%",
+                      backgroundColor: "#a855f7",
+                      boxShadow: "0 0 8px #a855f7",
+                      animation: "pulse 1.5s infinite",
+                    }}
+                  />
+                  <span style={{ fontWeight: 500 }}>
+                    Refreshing airing schedule from LiveChart...
+                  </span>
+                  <span
+                    style={{
+                      fontSize: "12px",
+                      color: "var(--text-muted)",
+                      marginLeft: "auto",
+                    }}
+                  >
+                    Fresh episodes will display automatically
+                  </span>
+                </div>
+              )}
+              {/* Horizontal Day Tabs Navigation */}
+              {(() => {
+                const daysOfWeek = [
+                  "Sunday",
+                  "Monday",
+                  "Tuesday",
+                  "Wednesday",
+                  "Thursday",
+                  "Friday",
+                  "Saturday",
+                ];
+                const today = new Date();
+                const tabs = ["All", "Today", "Tomorrow"];
+                for (let i = 2; i < 7; i++) {
+                  const nextDate = new Date(
+                    today.getTime() + i * 24 * 60 * 60 * 1000,
+                  );
+                  tabs.push(daysOfWeek[nextDate.getDay()]);
+                }
+
+                return (
+                  <div className="calendar-tabs-container">
+                    {tabs.map((day) => {
+                      const isActive = calendarDayFilter === day;
+                      return (
+                        <button
+                          key={day}
+                          className={`calendar-day-tab ${isActive ? "active" : ""}`}
+                          onClick={() => setCalendarDayFilter(day)}
+                        >
+                          {day === "All"
+                            ? "ALL"
+                            : day === "Today"
+                              ? "TODAY"
+                              : day === "Tomorrow"
+                                ? "TOMORROW"
+                                : day.substring(0, 3).toUpperCase()}
+                        </button>
+                      );
+                    })}
+                  </div>
+                );
+              })()}
+
+              <div className="schedule-feed-container">
+                {(() => {
+                  const days = [
+                    "Sunday",
+                    "Monday",
+                    "Tuesday",
+                    "Wednesday",
+                    "Thursday",
+                    "Friday",
+                    "Saturday",
+                  ];
+                  const scheduleByDay = [];
+                  const today = new Date();
+
+                  for (let i = 0; i < 7; i++) {
+                    const targetDate = new Date(
+                      today.getTime() + i * 24 * 60 * 60 * 1000,
+                    );
+                    const dayName = days[targetDate.getDay()];
+                    const dateStr = targetDate.toLocaleDateString(undefined, {
+                      month: "short",
+                      day: "numeric",
+                    });
+
+                    const dayStart =
+                      new Date(
+                        targetDate.getFullYear(),
+                        targetDate.getMonth(),
+                        targetDate.getDate(),
+                        0,
+                        0,
+                        0,
+                      ).getTime() / 1000;
+                    const dayEnd = dayStart + 24 * 3600;
+
+                    const dayEpisodes = scheduleData.filter(
+                      (ep) => ep.date >= dayStart && ep.date < dayEnd,
+                    );
+
+                    scheduleByDay.push({
+                      dayName:
+                        i === 0 ? "Today" : i === 1 ? "Tomorrow" : dayName,
+                      dateStr,
+                      episodes: dayEpisodes,
+                    });
+                  }
+
+                  const filteredGroups = scheduleByDay.filter((group) => {
+                    if (calendarDayFilter === "All") return true;
+                    return group.dayName === calendarDayFilter;
+                  });
+
+                  const totalEpisodesCount = filteredGroups.reduce(
+                    (acc, g) => acc + g.episodes.length,
+                    0,
+                  );
+
+                  if (totalEpisodesCount === 0) {
+                    return (
+                      <div className="schedule-empty-state glass-panel">
+                        <div className="empty-state-icon">
+                          <Tv size={36} style={{ color: "var(--accent)" }} />
+                        </div>
+                        <h3>
+                          No episodes airing{" "}
+                          {calendarDayFilter !== "All"
+                            ? calendarDayFilter.toLowerCase()
+                            : "this week"}
+                        </h3>
+                        <p>
+                          Check back later or view other days in the calendar.
+                        </p>
+                      </div>
+                    );
+                  }
+
+                  return filteredGroups.map((group) => {
+                    if (group.episodes.length === 0) return null;
+
+                    return (
+                      <div key={group.dayName} className="schedule-day-section">
+                        <div className="schedule-section-header">
+                          <span className="section-day-name">
+                            {group.dayName}
+                          </span>
+                          <span className="section-day-date">
+                            {group.dateStr}
+                          </span>
+                        </div>
+
+                        <div className="schedule-vertical-list">
+                          {group.episodes.map((ep) => {
+                            const airTime = new Date(
+                              ep.date * 1000,
+                            ).toLocaleTimeString([], {
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            });
+
+                            const isAired = ep.date * 1000 <= timeTicker;
+                            const countdownStr = getCountdownString(ep.date);
+
+                            return (
+                              <div
+                                key={`${ep.livechart_id}-${ep.episode}`}
+                                className="schedule-row-card glass-panel"
+                                onClick={() => {
+                                  if (ep.malid) {
+                                    onSelectMedia(
+                                      ep.malid,
+                                      "mal",
+                                      "Back to Calendar",
+                                    );
+                                  } else {
+                                    triggerScrapeSearch(ep.title);
+                                  }
+                                }}
+                              >
+                                <div className="schedule-row-left">
+                                  {ep.image ? (
+                                    <img
+                                      src={ep.image}
+                                      alt={ep.title}
+                                      className="schedule-row-img"
+                                    />
+                                  ) : (
+                                    <div className="schedule-row-no-img">
+                                      <Tv size={20} />
+                                    </div>
+                                  )}
+                                </div>
+                                <div className="schedule-row-middle">
+                                  <h4
+                                    className="schedule-row-title"
+                                    title={ep.title}
+                                  >
+                                    {ep.title}
+                                  </h4>
+                                  <span className="schedule-row-num">
+                                    Episode {ep.episode}
+                                  </span>
+                                </div>
+                                <div className="schedule-row-right">
+                                  <span className="schedule-row-time">
+                                    <Clock
+                                      size={12}
+                                      style={{ marginRight: "4px" }}
+                                    />
+                                    {airTime}
+                                  </span>
+                                  <span
+                                    className={`schedule-row-countdown ${isAired ? "aired" : "airing"}`}
+                                  >
+                                    {countdownStr}
+                                  </span>
+                                  {isAired && (
+                                    <button
+                                      className="schedule-row-scrape-btn"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        triggerScrapeSearch(ep.title);
+                                      }}
+                                    >
+                                      <Search size={12} />
+                                      <span>Find Stream</span>
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  });
+                })()}
+              </div>
+            </div>
+          </div>
+        )
+      ) : /* Content grid */
+      loading ? (
         <div className="loading-center-panel">
           <img
             src="/images/loading.gif"

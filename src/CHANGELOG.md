@@ -1,5 +1,28 @@
 # Changelog
 
+# [8.0.0]
+
+### Airing Calendar
+
+- **Weekly Airing Calendar**: Introduced a brand new airing calendar feed showing scheduled anime releases.
+
+### Video Player & Navigation
+
+- **Timeline Skip Markers**: Added skip indicators on the timeline progress bar to visualize the exact duration of intros and outros and skip button.
+- **Auto-Skip**: Added a global "Auto-Skip Intro & Outro" Yes/No toggle in Settings > Anime Settings.
+- **Offline Skip Times Cache**: Automatically saves intro/outro timestamps directly to the database.
+- **Picture-in-Picture (PiP) Mode**: Added a PiP toggle button.
+
+### Manga Reader & Settings
+
+- **Multiple Layout Modes Supported**: Fully supports Long Strip, Single Page, and Double Page layouts, all selectable globally inside Settings.
+- **Fluid Page Width Control**: Replaced standard Minimize and Maximize size toggle buttons with a fluid range slider (400px to 1600px) inside the reader header and Settings panel to customize display width dynamically for all layout modes.
+- **Improved Side-Click Navigation**: In Single and Double page layouts, click directly on the left half of the screen to go back, and the right half to go forward. In Long Strip layout, click the top half to scroll up, and the bottom half to scroll down.
+
+### Watch Together
+
+- **Session Metadata Sync Fix**: Corrected active media tracking inside the Watch Together panel. Restricted metadata overrides to only allow title, ID, and episode matches that align with the currently playing media or active session to prevent mismatching data.
+
 # [7.5.0] - 2026-07-08
 
 ### Watch Together
