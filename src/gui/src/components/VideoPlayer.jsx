@@ -194,6 +194,9 @@ export default function VideoPlayer({
   }, []);
 
   const [sources, setSources] = useState([]);
+  const [currentEpisode, setCurrentEpisode] = useState(episodeNumOrId);
+  const [isCurrentDownloaded, setIsCurrentDownloaded] = useState(isDownloaded);
+  const [playerSubDub, setPlayerSubDub] = useState(subdub || "sub");
 
   const [isPip, setIsPip] = useState(false);
   const pipSupported =
@@ -524,9 +527,6 @@ export default function VideoPlayer({
     }
   };
 
-  const [currentEpisode, setCurrentEpisode] = useState(episodeNumOrId);
-  const [isCurrentDownloaded, setIsCurrentDownloaded] = useState(isDownloaded);
-  const [playerSubDub, setPlayerSubDub] = useState(subdub || "sub");
 
   useEffect(() => {
     setCurrentEpisode(episodeNumOrId);
