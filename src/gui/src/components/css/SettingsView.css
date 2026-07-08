@@ -259,7 +259,7 @@
 .settings-history-list-container {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 16px;
   margin-top: 10px;
   width: 100%;
 }

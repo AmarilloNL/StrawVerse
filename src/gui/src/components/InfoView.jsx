@@ -34,7 +34,12 @@ export default function InfoView({
     useState(propLocalMalProvider);
   const [details, setDetails] = useState(null);
 
-  const onWatch = (...args) => {
+  const onWatch = async (...args) => {
+    const isNotInLibrary = !currentTags || currentTags.length === 0 || !currentTags[0];
+    if (isNotInLibrary) {
+      await saveTags("Watching");
+      triggerPulse();
+    }
     const newArgs = [...args];
     while (newArgs.length < 9) {
       newArgs.push(undefined);
@@ -43,7 +48,12 @@ export default function InfoView({
     propOnWatch(...newArgs);
   };
 
-  const onRead = (...args) => {
+  const onRead = async (...args) => {
+    const isNotInLibrary = !currentTags || currentTags.length === 0 || !currentTags[0];
+    if (isNotInLibrary) {
+      await saveTags("Reading");
+      triggerPulse();
+    }
     const newArgs = [...args];
     while (newArgs.length < 8) {
       newArgs.push(undefined);
@@ -68,8 +78,24 @@ export default function InfoView({
   const [rangeInput, setRangeInput] = useState("");
   const [lastClickedId, setLastClickedId] = useState(null);
   const [isRangeInputInvalid, setIsRangeInputInvalid] = useState(false);
-  const [sortOrder, setSortOrder] = useState("asc");
-  const [sortDirection, setSortDirection] = useState("asc");
+  const [sortOrder, setSortOrder] = useState(
+    () => localStorage.getItem("info_sort_order") || "asc"
+  );
+  const [sortDirection, setSortDirection] = useState(
+    () => localStorage.getItem("info_sort_direction") || "asc"
+  );
+
+  const formatTime = (seconds) => {
+    if (isNaN(seconds) || seconds === null) return "";
+    const h = Math.floor(seconds / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    const s = Math.floor(seconds % 60);
+    const pad = (n) => String(n).padStart(2, "0");
+    if (h > 0) {
+      return `${h}:${pad(m)}:${pad(s)}`;
+    }
+    return `${m}:${pad(s)}`;
+  };
 
   const isDownloaded = (itemNum, subdub = "sub") => {
     const num = parseFloat(itemNum);
@@ -255,13 +281,20 @@ export default function InfoView({
       }
 
       if (isInitial) {
-        const isAnimePahe =
-          data?.provider?.toLowerCase() === "animepahe" ||
-          data?.provider?.toLowerCase() === "pahe";
-        if (isAnimePahe) {
-          setSortOrder("desc");
+        const savedSort = localStorage.getItem("info_sort_order");
+        if (savedSort) {
+          setSortOrder(savedSort);
+          const savedDir = localStorage.getItem("info_sort_direction");
+          if (savedDir) setSortDirection(savedDir);
         } else {
-          setSortOrder("asc");
+          const isAnimePahe =
+            data?.provider?.toLowerCase() === "animepahe" ||
+            data?.provider?.toLowerCase() === "pahe";
+          if (isAnimePahe) {
+            setSortOrder("desc");
+          } else {
+            setSortOrder("asc");
+          }
         }
       }
 
@@ -2343,6 +2376,8 @@ export default function InfoView({
                     onClick={() => {
                       setSortOrder("asc");
                       setSortDirection("asc");
+                      localStorage.setItem("info_sort_order", "asc");
+                      localStorage.setItem("info_sort_direction", "asc");
                       setIsSortDropdownOpen(false);
                       const isAnimePahe =
                         details?.provider?.toLowerCase() === "animepahe" ||
@@ -2359,6 +2394,8 @@ export default function InfoView({
                     onClick={() => {
                       setSortOrder("desc");
                       setSortDirection("desc");
+                      localStorage.setItem("info_sort_order", "desc");
+                      localStorage.setItem("info_sort_direction", "desc");
                       setIsSortDropdownOpen(false);
                       const isAnimePahe =
                         details?.provider?.toLowerCase() === "animepahe" ||
@@ -2375,6 +2412,7 @@ export default function InfoView({
                       className={`custom-dropdown-item ${sortOrder === "downloaded" ? "selected" : ""}`}
                       onClick={() => {
                         setSortOrder("downloaded");
+                        localStorage.setItem("info_sort_order", "downloaded");
                         setIsSortDropdownOpen(false);
                       }}
                     >
@@ -2471,9 +2509,11 @@ export default function InfoView({
                     display: "flex",
                     alignItems: "center",
                     gap: "6px",
-                    background: "rgba(255, 255, 255, 0.02)",
-                    padding: "4px 8px",
-                    borderRadius: "8px",
+                    background: "var(--bg-tertiary)",
+                    padding: "0 8px 0 12px",
+                    borderRadius: "6px",
+                    height: "38px",
+                    boxSizing: "border-box",
                     border: isRangeInputInvalid
                       ? "1.5px solid var(--danger)"
                       : "1px solid var(--border)",
@@ -2500,11 +2540,12 @@ export default function InfoView({
                     }}
                     className="input-val"
                     style={{
-                      width: "140px",
-                      padding: "6px 10px",
+                      width: "120px",
+                      padding: "0",
                       fontSize: "13px",
                       border: "none",
                       background: "transparent",
+                      color: "white",
                       outline: "none",
                     }}
                   />
@@ -2512,11 +2553,14 @@ export default function InfoView({
                     onClick={() => handleSelectRange(rangeInput, true)}
                     className="btn-bulk"
                     style={{
-                      padding: "4px 10px",
-                      fontSize: "12px",
+                      padding: "5px 10px",
+                      fontSize: "13px",
                       border: "none",
                       backgroundColor: "rgba(124, 58, 237, 0.15)",
-                      color: "var(--accent-hover)",
+                      color: "#a78bfa",
+                      borderRadius: "4px",
+                      cursor: "pointer",
+                      fontWeight: "600",
                     }}
                     title="Select range of episodes"
                   >
@@ -2593,7 +2637,8 @@ export default function InfoView({
                     display: "flex",
                     alignItems: "center",
                     gap: "14px",
-                    flex: 1,
+                    width: "220px",
+                    flexShrink: 0,
                   }}
                 >
                   {showOnlineActions && (
@@ -2612,11 +2657,108 @@ export default function InfoView({
                       }}
                     />
                   )}
-                  <span className="item-num">
+                  <span className="item-num" style={{ fontWeight: "600", fontSize: "14px" }}>
                     {type === "Anime"
                       ? `Episode ${item.number}`
-                      : item.title || `Chapter ${item.number}`}
+                      : `Chapter ${item.number}`}
                   </span>
+                </div>
+
+                <div
+                  className="item-middle-progress"
+                  style={{
+                    flex: 1,
+                    display: "flex",
+                    flexDirection: "row",
+                    alignItems: "center",
+                    gap: "24px",
+                    padding: "0 16px",
+                    overflow: "hidden",
+                  }}
+                >
+                  {type === "Anime" && item.title && item.title !== `Episode ${item.number}` && (
+                    <span
+                      style={{
+                        fontSize: "13px",
+                        color: "var(--text-muted)",
+                        fontWeight: "500",
+                        textOverflow: "ellipsis",
+                        overflow: "hidden",
+                        whiteSpace: "nowrap",
+                        maxWidth: "280px",
+                      }}
+                      title={item.title}
+                    >
+                      {item.title}
+                    </span>
+                  )}
+                  {type === "Manga" && item.title && item.title !== `Chapter ${item.number}` && (
+                    <span
+                      style={{
+                        fontSize: "13px",
+                        color: "var(--text-muted)",
+                        fontWeight: "500",
+                        textOverflow: "ellipsis",
+                        overflow: "hidden",
+                        whiteSpace: "nowrap",
+                        maxWidth: "280px",
+                      }}
+                      title={item.title}
+                    >
+                      {item.title}
+                    </span>
+                  )}
+                  {(() => {
+                    if (!epStatus) return null;
+                    const curVal = type === "Anime" ? epStatus.currentTime : epStatus.currentPage;
+                    const totVal = type === "Anime" ? epStatus.duration : epStatus.totalPages;
+                    if (curVal === undefined || curVal === null || totVal === undefined || totVal === null) return null;
+
+                    return (
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "12px",
+                          flex: 1,
+                          minWidth: "160px",
+                          maxWidth: "300px",
+                        }}
+                      >
+                        <div
+                          style={{
+                            width: "70px",
+                            height: "4px",
+                            backgroundColor: "rgba(255, 255, 255, 0.08)",
+                            borderRadius: "2px",
+                            overflow: "hidden",
+                            flexShrink: 0,
+                          }}
+                        >
+                          <div
+                            style={{
+                              width: `${Math.min(100, Math.max(0, (curVal / (totVal || 1)) * 100))}%`,
+                              height: "100%",
+                              backgroundColor: epStatus.isCompleted ? "#34d399" : "var(--accent)",
+                              borderRadius: "2px",
+                            }}
+                          />
+                        </div>
+                        <span
+                          style={{
+                            fontSize: "11px",
+                            color: "var(--text-muted)",
+                            fontWeight: "500",
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          {type === "Anime"
+                            ? `${formatTime(curVal)} / ${formatTime(totVal)}`
+                            : `Page ${curVal}/${totVal}`}
+                        </span>
+                      </div>
+                    );
+                  })()}
                 </div>
 
                 <div

@@ -1,5 +1,30 @@
 # Changelog
 
+# [7.4.5] - 2026-07-08
+
+### Player & Sidebar
+
+- The sidebar will now hide automatically when a video is playing so you can watch in full screen, and you can bring it back just by moving your mouse to the left side.
+- Thickened the video progress bar and made it glow purple when you hover over it.
+- Replaced the bulky exit player button with a clean and light back button.
+
+### Details Page & Styling
+
+- Show your last watched time (like `4:10 / 24:02`) or last page read on individual episode and chapter rows.
+- The details page will now remember if you sorted episodes ascending or descending.
+- Redesigned the episode range select box to match the other inputs next to it.
+- Aligned catalog cards so their titles line up perfectly.
+- Made text on cover badges easier to read on bright backgrounds by adding a dark shadow behind them.
+
+### History & Stats
+
+- Added a switch next to your history list to filter by all, only anime, or only manga.
+
+### Library & Bug Fixes
+
+- Starting a video or reading a chapter now automatically adds the series to your library under "Watching" or "Reading".
+- Custom MyAnimeList manga mapping link and unlink updates are now automatically sent to the mapping server.
+
 # [7.4.4] - 2026-07-07
 
 ### Stream Downloader & Subtitles

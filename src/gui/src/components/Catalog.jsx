@@ -696,7 +696,7 @@ export default function Catalog({
             <form
               onSubmit={handleSearchSubmit}
               className="search-form"
-              style={{ margin: "0 auto" }}
+              style={{ width: "100%", maxWidth: "450px" }}
             >
               <input
                 type="text"

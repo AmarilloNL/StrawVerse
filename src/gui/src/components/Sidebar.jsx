@@ -97,16 +97,7 @@ export default function Sidebar({
           const Icon = settingsItem.icon;
           const isActive = currentView === settingsItem.id;
           return (
-            <div
-              className="sidebar-footer"
-              style={{
-                padding: "16px 8px",
-                borderTop: "1px solid var(--border)",
-                display: "flex",
-                flexDirection: "column",
-                gap: "8px",
-              }}
-            >
+            <div className="sidebar-footer">
               <button
                 onClick={() => setView(settingsItem.id)}
                 className={`sidebar-item ${isActive ? "active" : ""}`}

@@ -15,31 +15,18 @@ import {
 import "./css/MangaReader.css";
 
 // Lazy-loaded page component with CSS transition fade-in
-function LazyMangaPage({ src, alt, style }) {
+function LazyMangaPage({ src, alt, style, shouldLoad }) {
   const [isVisible, setIsVisible] = useState(false);
   const [loaded, setLoaded] = useState(false);
-  const ref = useRef(null);
 
   useEffect(() => {
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting) {
-          setIsVisible(true);
-          observer.disconnect();
-        }
-      },
-      { rootMargin: "800px 0px" }, // Load pages within 800px of viewport
-    );
-
-    if (ref.current) {
-      observer.observe(ref.current);
+    if (shouldLoad) {
+      setIsVisible(true);
     }
-
-    return () => observer.disconnect();
-  }, []);
+  }, [shouldLoad]);
 
   return (
-    <div ref={ref} className="lazy-page-container" style={style}>
+    <div className="lazy-page-container" style={style}>
       {isVisible ? (
         <>
           {!loaded && (
@@ -84,6 +71,7 @@ export default function MangaReader({
   malid,
 }) {
   const [items, setItems] = useState([]);
+  const [activePage, setActivePage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [appendingLoading, setAppendingLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
@@ -99,7 +87,7 @@ export default function MangaReader({
   const [activeChapterInView, setActiveChapterInView] = useState(null);
   const [autoLoadNext, setAutoLoadNext] = useState(true);
   const [readerSize, setReaderSize] = useState(
-    () => localStorage.getItem("manga_reader_size") || "standard"
+    () => localStorage.getItem("manga_reader_size") || "standard",
   );
 
   const handleSizeChange = (newSize) => {
@@ -217,7 +205,8 @@ export default function MangaReader({
     const pagesOfCurrentCh = items.filter(
       (item) => item.type === "page" && item.chapterId === activeChapterInView,
     );
-    const totalPages = pagesOfCurrentCh.length || 1;
+    if (pagesOfCurrentCh.length === 0) return;
+    const totalPages = pagesOfCurrentCh.length;
 
     const now = Date.now();
     const timeSpent = (now - lastTickTimeRef.current) / 1000;
@@ -250,6 +239,8 @@ export default function MangaReader({
   // Load progress
   useEffect(() => {
     savedResumePageRef.current = 1;
+    activePageRef.current = 1;
+    setActivePage(1); // Reset active page state on chapter change
     lastTickTimeRef.current = Date.now();
 
     const loadProgress = async () => {
@@ -275,8 +266,10 @@ export default function MangaReader({
           const savedPage = parseInt(
             progressData.lastProgress.currentPage || 1,
           );
-          const resumePage = Math.max(1, savedPage - 1);
+          const resumePage = Math.max(1, savedPage); // Go to the exact page they left from
           savedResumePageRef.current = resumePage;
+          activePageRef.current = resumePage;
+          setActivePage(resumePage);
         }
       } catch (err) {
         console.error("Failed to load progress:", err);
@@ -474,7 +467,10 @@ export default function MangaReader({
           activePageVal = parseInt(el.getAttribute("data-page") || "1");
         }
       }
-      activePageRef.current = activePageVal;
+      if (activePageVal !== activePageRef.current) {
+        activePageRef.current = activePageVal;
+        setActivePage(activePageVal);
+      }
 
       if (activeId && activeId !== activeChapterInView) {
         setActiveChapterInView(activeId);
@@ -613,17 +609,31 @@ export default function MangaReader({
         <div className="header-right-section">
           <div className="reader-size-controls">
             <button
-              onClick={() => handleSizeChange(readerSize === "compact" ? "standard" : "compact")}
+              onClick={() =>
+                handleSizeChange(
+                  readerSize === "compact" ? "standard" : "compact",
+                )
+              }
               className={`btn-reader-size ${readerSize === "compact" ? "active" : ""}`}
-              title={readerSize === "compact" ? "Reset to Standard Size" : "Minimize / Compact Reader Width"}
+              title={
+                readerSize === "compact"
+                  ? "Reset to Standard Size"
+                  : "Minimize / Compact Reader Width"
+              }
             >
               <Minimize2 size={15} />
               <span className="btn-size-label">Minimize</span>
             </button>
             <button
-              onClick={() => handleSizeChange(readerSize === "full" ? "standard" : "full")}
+              onClick={() =>
+                handleSizeChange(readerSize === "full" ? "standard" : "full")
+              }
               className={`btn-reader-size ${readerSize === "full" ? "active" : ""}`}
-              title={readerSize === "full" ? "Reset to Standard Size" : "Maximize / Full Reader Width"}
+              title={
+                readerSize === "full"
+                  ? "Reset to Standard Size"
+                  : "Maximize / Full Reader Width"
+              }
             >
               <Maximize2 size={15} />
               <span className="btn-size-label">Maximize</span>
@@ -716,6 +726,9 @@ export default function MangaReader({
                   </div>
                 );
               } else {
+                const shouldLoad =
+                  item.chapterId === activeChapterInView &&
+                  Math.abs(item.page - activePage) <= 3;
                 return (
                   <div
                     key={item.id}
@@ -723,7 +736,11 @@ export default function MangaReader({
                     data-page={item.page}
                     className="page-wrapper"
                   >
-                    <LazyMangaPage src={item.img} alt={`Page ${item.page}`} />
+                    <LazyMangaPage
+                      src={item.img}
+                      alt={`Page ${item.page}`}
+                      shouldLoad={shouldLoad}
+                    />
                     <div className="page-num">Page {item.page}</div>
                   </div>
                 );

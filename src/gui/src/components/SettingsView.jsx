@@ -161,6 +161,7 @@ export default function SettingsView({
 
   const [stats, setStats] = useState(null);
   const [historyList, setHistoryList] = useState([]);
+  const [historyFilter, setHistoryFilter] = useState("All");
   const [statsLoading, setStatsLoading] = useState(false);
 
   const [changelog, setChangelog] = useState("");
@@ -1314,19 +1315,57 @@ export default function SettingsView({
                         alignItems: "center",
                         marginBottom: "20px",
                         borderBottom: "1px dashed var(--border)",
-                        paddingBottom: "10px",
+                        paddingBottom: "12px",
                       }}
                     >
-                      <h2
-                        className="settings-panel-title"
-                        style={{
-                          margin: 0,
-                          borderBottom: "none",
-                          paddingBottom: 0,
-                        }}
-                      >
-                        Recent Activity History
-                      </h2>
+                      <div style={{ display: "flex", alignItems: "center", gap: "20px" }}>
+                        <h2
+                          className="settings-panel-title"
+                          style={{
+                            margin: 0,
+                            borderBottom: "none",
+                            paddingBottom: 0,
+                          }}
+                        >
+                          Recent Activity History
+                        </h2>
+                        
+                        {/* Segmented Toggle Control */}
+                        <div
+                          className="market-tabs-wrapper"
+                          style={{
+                            display: "flex",
+                            backgroundColor: "var(--bg-secondary)",
+                            padding: "3px",
+                            borderRadius: "20px",
+                            border: "1px solid var(--border)",
+                            alignItems: "center",
+                          }}
+                        >
+                          {["All", "Anime", "Manga"].map((t) => (
+                            <button
+                              key={t}
+                              type="button"
+                              onClick={() => setHistoryFilter(t)}
+                              className={`market-tab-btn ${historyFilter === t ? "active" : ""}`}
+                              style={{
+                                backgroundColor: historyFilter === t ? "var(--accent)" : "transparent",
+                                border: "none",
+                                color: historyFilter === t ? "white" : "var(--text-muted)",
+                                padding: "4px 12px",
+                                borderRadius: "16px",
+                                fontSize: "12px",
+                                fontWeight: "600",
+                                cursor: "pointer",
+                                transition: "var(--transition)",
+                              }}
+                            >
+                              {t}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
                       {historyList.length > 0 && (
                         <button
                           type="button"
@@ -1341,6 +1380,10 @@ export default function SettingsView({
                             fontSize: "12px",
                             fontWeight: "600",
                             cursor: "pointer",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            height: "32px",
                             transition: "all 0.2s ease",
                           }}
                         >
@@ -1348,129 +1391,141 @@ export default function SettingsView({
                         </button>
                       )}
                     </div>
-                    {historyList.length === 0 ? (
-                      <p
-                        style={{
-                          color: "var(--text-muted)",
-                          fontSize: "13px",
-                          fontStyle: "italic",
-                          padding: "10px 0",
-                        }}
-                      >
-                        No history records found yet. Go watch some anime or
-                        read some manga!
-                      </p>
-                    ) : (
-                      <div className="settings-history-list-container">
-                        {historyList.map((item, idx) => {
-                          const formattedTime =
-                            item.time_spent > 3600
-                              ? `${(item.time_spent / 3600).toFixed(1)} hours`
-                              : item.time_spent > 60
-                                ? `${Math.round(item.time_spent / 60)} minutes`
-                                : `${Math.round(item.time_spent)} seconds`;
+                    {(() => {
+                      const filteredHistory = historyList.filter((item) => {
+                        if (historyFilter === "All") return true;
+                        return item.type === historyFilter;
+                      });
 
-                          const formattedDate = new Date(
-                            item.date,
-                          ).toLocaleString([], {
-                            month: "short",
-                            day: "numeric",
-                            hour: "2-digit",
-                            minute: "2-digit",
-                          });
+                      if (filteredHistory.length === 0) {
+                        return (
+                          <p
+                            style={{
+                              color: "var(--text-muted)",
+                              fontSize: "13px",
+                              fontStyle: "italic",
+                              padding: "10px 0",
+                            }}
+                          >
+                            {historyFilter === "All"
+                              ? "No history records found yet. Go watch some anime or read some manga!"
+                              : `No ${historyFilter.toLowerCase()} history records found.`}
+                          </p>
+                        );
+                      }
 
-                          return (
-                            <div
-                              key={idx}
-                              className="settings-history-item clickable"
-                              onClick={() => {
-                                if (onSelectMedia && item.media_id) {
-                                  onSelectMedia(
-                                    item.media_id,
-                                    item.type,
-                                    item.provider || "local",
-                                    "Back to Settings",
-                                  );
-                                }
-                              }}
-                            >
-                              <div className="settings-history-item-left">
-                                <span
-                                  className={`settings-history-type-badge ${item.type === "Anime" ? "" : "manga"}`}
-                                >
-                                  {item.type}
-                                </span>
-                                <div
-                                  style={{
-                                    display: "flex",
-                                    flexDirection: "column",
-                                    gap: "4px",
-                                  }}
-                                >
+                      return (
+                        <div className="settings-history-list-container">
+                          {filteredHistory.map((item, idx) => {
+                            const formattedTime =
+                              item.time_spent > 3600
+                                ? `${(item.time_spent / 3600).toFixed(1)} hours`
+                                : item.time_spent > 60
+                                  ? `${Math.round(item.time_spent / 60)} minutes`
+                                  : `${Math.round(item.time_spent)} seconds`;
+
+                            const formattedDate = new Date(
+                              item.date,
+                            ).toLocaleString([], {
+                              month: "short",
+                              day: "numeric",
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            });
+
+                            return (
+                              <div
+                                key={idx}
+                                className="settings-history-item clickable"
+                                onClick={() => {
+                                  if (onSelectMedia && item.media_id) {
+                                    onSelectMedia(
+                                      item.media_id,
+                                      item.type,
+                                      item.provider || "local",
+                                      "Back to Settings",
+                                    );
+                                  }
+                                }}
+                              >
+                                <div className="settings-history-item-left">
+                                  <span
+                                    className={`settings-history-type-badge ${item.type === "Anime" ? "" : "manga"}`}
+                                  >
+                                    {item.type}
+                                  </span>
                                   <div
                                     style={{
                                       display: "flex",
-                                      alignItems: "center",
-                                      gap: "8px",
-                                      flexWrap: "wrap",
+                                      flexDirection: "column",
+                                      gap: "4px",
                                     }}
                                   >
-                                    <strong className="settings-history-item-title">
-                                      {item.title}
-                                    </strong>
-                                    {item.is_completed === 1 && (
-                                      <span
-                                        className="settings-completed-badge"
-                                        style={{
-                                          fontSize: "9px",
-                                          padding: "2px 6px",
-                                        }}
-                                      >
-                                        Completed
-                                      </span>
-                                    )}
+                                    <div
+                                      style={{
+                                        display: "flex",
+                                        alignItems: "center",
+                                        gap: "8px",
+                                        flexWrap: "wrap",
+                                      }}
+                                    >
+                                      <strong className="settings-history-item-title">
+                                        {item.title}
+                                      </strong>
+                                      {item.is_completed === 1 && (
+                                        <span
+                                          className="settings-completed-badge"
+                                          style={{
+                                            fontSize: "9px",
+                                            padding: "2px 6px",
+                                          }}
+                                        >
+                                          Completed
+                                        </span>
+                                      )}
+                                    </div>
+                                    <span className="settings-history-item-meta">
+                                      {item.type === "Anime"
+                                        ? "Episode"
+                                        : "Chapter"}{" "}
+                                      {item.number} • Spent {formattedTime}
+                                    </span>
                                   </div>
-                                  <span className="settings-history-item-meta">
-                                    {item.type === "Anime"
-                                      ? "Episode"
-                                      : "Chapter"}{" "}
-                                    {item.number} • Spent {formattedTime}
+                                </div>
+                                <div
+                                  style={{
+                                    display: "flex",
+                                    alignItems: "center",
+                                    gap: "16px",
+                                    flexShrink: 0,
+                                  }}
+                                >
+                                  <span className="settings-history-item-date">
+                                    {formattedDate}
                                   </span>
+                                  <button
+                                    type="button"
+                                    className="history-delete-btn"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleDeleteHistory(
+                                        item.type,
+                                        item.id,
+                                        item.title,
+                                        item.number,
+                                      );
+                                    }}
+                                    title="Delete history entry"
+                                  >
+                                    <Trash2 size={16} />
+                                  </button>
                                 </div>
                               </div>
-                              <div
-                                style={{
-                                  display: "flex",
-                                  alignItems: "center",
-                                  gap: "16px",
-                                  flexShrink: 0,
-                                }}
-                              >
-                                <span className="settings-history-item-date">
-                                  {formattedDate}
-                                </span>
-                                <button
-                                  type="button"
-                                  className="history-delete-btn"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleDeleteHistory(
-                                      item.type,
-                                      item.id,
-                                      item.title,
-                                      item.number,
-                                    );
-                                  }}
-                                  title="Delete history entry"
-                                >
-                                  <Trash2 size={16} />
-                                </button>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
+                            );
+                          })}
+                        </div>
+                      );
+                    })()}
                   </div>
                 </>
               )}

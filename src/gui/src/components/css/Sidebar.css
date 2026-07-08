@@ -122,3 +122,51 @@
 .sidebar.collapsed .sidebar-item {
   justify-content: center;
 }
+
+.sidebar-footer {
+  padding: 16px 8px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.sidebar.collapsed .sidebar-footer {
+  padding: 16px 8px;
+}
+
+/* Cinema Mode Styles */
+.cinema-mode .sidebar {
+  width: 0px !important;
+  opacity: 0;
+  border-right: none;
+  pointer-events: none;
+}
+
+.cinema-mode-trigger {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 15px;
+  height: 100vh;
+  z-index: 150;
+  background: transparent;
+}
+
+.cinema-mode:has(.cinema-mode-trigger:hover) .sidebar,
+.cinema-mode .sidebar:hover {
+  width: 240px !important;
+  opacity: 1;
+  border-right: 1px solid var(--border);
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100vh;
+  z-index: 200;
+  pointer-events: auto;
+  box-shadow: 10px 0 30px rgba(0, 0, 0, 0.85);
+}
+
+.cinema-mode:has(.cinema-mode-trigger:hover) .sidebar.collapsed,
+.cinema-mode .sidebar.collapsed:hover {
+  width: 70px !important;
+}

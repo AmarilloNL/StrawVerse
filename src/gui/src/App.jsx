@@ -526,8 +526,11 @@ export default function App() {
     }
   };
 
+  const isCinemaMode = current.view === "watch";
+
   return (
-    <>
+    <div className={`app-layout ${isCinemaMode ? "cinema-mode" : ""}`}>
+      {isCinemaMode && <div className="cinema-mode-trigger" />}
       <Sidebar
         currentView={current.view}
         setView={(view) => setHistory([{ view, params: {} }])}
@@ -622,6 +625,6 @@ export default function App() {
           ))}
         </div>
       )}
-    </>
+    </div>
   );
 }
