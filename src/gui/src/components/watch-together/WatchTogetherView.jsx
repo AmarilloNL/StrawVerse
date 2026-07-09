@@ -314,13 +314,14 @@ export default function WatchTogetherView({ onNavigate }) {
       setSelectedAnimeDetails(infoData);
 
       const targetId = infoData?.dataId || item.id;
-      const resEp = await fetch("/api/episodes", {
+      const resEp = await fetch("/api/info/items", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           id: targetId,
           page: 1,
           provider: selectedProvider,
+          type: "Anime",
         }),
       });
       const epData = await resEp.json();
