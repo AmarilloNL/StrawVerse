@@ -1,5 +1,9 @@
 # Changelog
 
+# [8.0.1] - 2026-07-09
+
+updated watch together episode api with new one
+
 # [8.0.0] - 2026-07-09
 
 ### Downloader & Performance
