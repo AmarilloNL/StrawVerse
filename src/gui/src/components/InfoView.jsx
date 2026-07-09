@@ -17,6 +17,8 @@ import {
   Plus,
 } from "lucide-react";
 import Swal from "sweetalert2";
+import { swalSuccess, swalError, swalConfirm } from "../utils/swal";
+import { apiPost } from "../utils/common";
 import Dropdown from "./Dropdown";
 import "./css/InfoView.css";
 
@@ -48,7 +50,7 @@ export default function InfoView({
     while (newArgs.length < 9) {
       newArgs.push(undefined);
     }
-    newArgs[9] = details?.malid;
+    newArgs[9] = details?.malid || details?.MalID;
     propOnWatch(...newArgs);
   };
 
@@ -273,8 +275,13 @@ export default function InfoView({
       }
 
       if (isInitial) {
-        const savedSort = localStorage.getItem("info_sort_order");
-        if (savedSort) {
+        const savedSort = localStorage.getItem("info_sort_order") || sortOrder;
+        if (
+          savedSort &&
+          (savedSort === "asc" ||
+            savedSort === "desc" ||
+            savedSort === "downloaded")
+        ) {
           setSortOrder(savedSort);
         } else {
           const isAnimePahe =
@@ -1235,25 +1242,11 @@ export default function InfoView({
         }
       }
 
-      Swal.fire({
-        title: "Queue Updated",
-        text: data.message || "Added to download queue!",
-        icon: "success",
-        background: "var(--bg-secondary)",
-        color: "var(--text-main)",
-        confirmButtonColor: "var(--accent)",
-      });
+      swalSuccess("Queue Updated", data.message || "Added to download queue!");
       setSelectedItems(new Set());
     } catch (err) {
       console.error(err);
-      Swal.fire({
-        title: "Error",
-        text: "Failed to add to download queue.",
-        icon: "error",
-        background: "var(--bg-secondary)",
-        color: "var(--text-main)",
-        confirmButtonColor: "var(--accent)",
-      });
+      swalError("Error", "Failed to add to download queue.");
     }
   };
 
@@ -1261,47 +1254,27 @@ export default function InfoView({
   const handleMalSync = async () => {
     if (!details?.malid) return;
     if (malStatus === "not_in_list") {
-      Swal.fire({
-        title: "Status Required",
-        text: "Please select a watch status (e.g., Watching, Plan to Watch) to add this title to MyAnimeList.",
-        icon: "warning",
-        background: "var(--bg-secondary)",
-        color: "var(--text-main)",
-        confirmButtonColor: "var(--accent)",
-      });
+      swalInfo(
+        "Status Required",
+        "Please select a watch status (e.g., Watching, Plan to Watch) to add this title to MyAnimeList.",
+      );
       return;
     }
     setMalSyncing(true);
     try {
-      const response = await fetch("/api/mal/update", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          malid: details.malid,
-          episodes: malWatched,
-          status: malStatus,
-          type: type,
-        }),
+      const data = await apiPost("/api/mal/update", {
+        malid: details.malid,
+        episodes: malWatched,
+        status: malStatus,
+        type: type,
       });
-      const data = await response.json();
-      Swal.fire({
-        title: "MAL Synced",
-        text: data.text || data.title || "Updated MyAnimeList successfully!",
-        icon: "success",
-        background: "var(--bg-secondary)",
-        color: "var(--text-main)",
-        confirmButtonColor: "var(--accent)",
-      });
+      swalSuccess(
+        "MAL Synced",
+        data.text || data.title || "Updated MyAnimeList successfully!",
+      );
     } catch (err) {
       console.error(err);
-      Swal.fire({
-        title: "Sync Failed",
-        text: "MAL update failed.",
-        icon: "error",
-        background: "var(--bg-secondary)",
-        color: "var(--text-main)",
-        confirmButtonColor: "var(--accent)",
-      });
+      swalError("Sync Failed", "MAL update failed.");
     } finally {
       setMalSyncing(false);
     }
@@ -1310,63 +1283,33 @@ export default function InfoView({
   const handleMalRemove = async () => {
     if (!details?.malid) return;
 
-    const result = await Swal.fire({
-      title: "Remove from MyAnimeList?",
-      text: "Are you sure you want to remove this title from your MyAnimeList list?",
-      icon: "warning",
-      showCancelButton: true,
-      confirmButtonText: "Yes, Remove",
-      cancelButtonText: "Cancel",
-      background: "var(--bg-secondary)",
-      color: "var(--text-main)",
-      confirmButtonColor: "var(--danger)",
-      cancelButtonColor: "var(--bg-tertiary)",
-    });
+    const result = await swalConfirm(
+      "Remove from MyAnimeList?",
+      "Are you sure you want to remove this title from your MyAnimeList list?",
+      "Yes, Remove",
+    );
 
     if (!result.isConfirmed) return;
 
     setMalSyncing(true);
     try {
-      const response = await fetch("/api/mal/remove", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          malid: details.malid,
-          type: type,
-        }),
+      const data = await apiPost("/api/mal/remove", {
+        malid: details.malid,
+        type: type,
       });
-      const data = await response.json();
 
       if (data.icon === "success") {
         setMalStatus("not_in_list");
-        Swal.fire({
-          title: "Removed",
-          text: data.title || "Successfully removed from MyAnimeList!",
-          icon: "success",
-          background: "var(--bg-secondary)",
-          color: "var(--text-main)",
-          confirmButtonColor: "var(--accent)",
-        });
+        swalSuccess(
+          "Removed",
+          data.title || "Successfully removed from MyAnimeList!",
+        );
       } else {
-        Swal.fire({
-          title: "Failed",
-          text: data.text || "Failed to remove entry.",
-          icon: "error",
-          background: "var(--bg-secondary)",
-          color: "var(--text-main)",
-          confirmButtonColor: "var(--accent)",
-        });
+        swalError("Failed", data.text || "Failed to remove entry.");
       }
     } catch (err) {
       console.error(err);
-      Swal.fire({
-        title: "Remove Failed",
-        text: "MyAnimeList removal request failed.",
-        icon: "error",
-        background: "var(--bg-secondary)",
-        color: "var(--text-main)",
-        confirmButtonColor: "var(--accent)",
-      });
+      swalError("Remove Failed", "MyAnimeList removal request failed.");
     } finally {
       setMalSyncing(false);
     }
@@ -1624,142 +1567,76 @@ export default function InfoView({
 
     if (allDownloaded.length === 0) return;
 
-    const confirmResult = await Swal.fire({
-      title: "Are you sure?",
-      text: `Are you sure you want to delete all downloaded files for ${details?.title}?`,
-      icon: "warning",
-      showCancelButton: true,
-      confirmButtonText: "Yes, delete all",
-      cancelButtonText: "Cancel",
-      background: "var(--bg-secondary)",
-      color: "var(--text-main)",
-      confirmButtonColor: "var(--danger)",
-      cancelButtonColor: "var(--bg-tertiary)",
+    await handleLocalDeleteFlow({
+      numbers: allDownloaded,
+      confirmTitle: "Are you sure?",
+      confirmText: `Are you sure you want to delete all downloaded files for ${details?.title}?`,
+      confirmBtn: "Yes, delete all",
+      successTitle: "Deleted",
+      successText: "Deleted successfully.",
+      onComplete: () => fetchDetails(false),
     });
-    if (!confirmResult.isConfirmed) return;
-    try {
-      const response = await fetch("/api/local/delete", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id, type, numbers: allDownloaded }),
-      });
-      const data = await response.json();
-      if (!data.error) {
-        Swal.fire({
-          title: "Deleted",
-          text: "Deleted successfully.",
-          icon: "success",
-          background: "var(--bg-secondary)",
-          color: "var(--text-main)",
-          confirmButtonColor: "var(--accent)",
-        });
-        fetchDetails(false);
-      } else {
-        Swal.fire({
-          title: "Error",
-          text: data.message,
-          icon: "error",
-          background: "var(--bg-secondary)",
-          color: "var(--text-main)",
-          confirmButtonColor: "var(--accent)",
-        });
-      }
-    } catch (err) {
-      console.error(err);
-    }
   };
-  // Delete single local episode file
-  const handleDeleteEpisode = async (epNum, subdub) => {
-    const confirmResult = await Swal.fire({
-      title: "Delete Episode?",
-      text: `Delete downloaded file for Episode ${epNum} (${subdub})?`,
-      icon: "warning",
-      showCancelButton: true,
-      confirmButtonText: "Yes, delete it",
-      cancelButtonText: "Cancel",
-      background: "var(--bg-secondary)",
-      color: "var(--text-main)",
-      confirmButtonColor: "var(--danger)",
-      cancelButtonColor: "var(--bg-tertiary)",
-    });
+
+  const handleLocalDeleteFlow = async ({
+    numbers,
+    subdub,
+    confirmTitle,
+    confirmText,
+    confirmBtn,
+    successTitle,
+    successText,
+    onComplete,
+  }) => {
+    const confirmResult = await swalConfirm(
+      confirmTitle,
+      confirmText,
+      confirmBtn,
+    );
     if (!confirmResult.isConfirmed) return;
     try {
-      const response = await fetch("/api/local/delete", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id, type, numbers: [epNum], subdub }),
+      const data = await apiPost("/api/local/delete", {
+        id,
+        type,
+        numbers,
+        subdub,
       });
-      const data = await response.json();
       if (!data.error) {
-        Swal.fire({
-          title: "Deleted",
-          text: "Episode file deleted.",
-          icon: "success",
-          background: "var(--bg-secondary)",
-          color: "var(--text-main)",
-          confirmButtonColor: "var(--accent)",
-        });
-        fetchDetails(); // Reload metadata and checks
+        swalSuccess(successTitle, successText);
+        if (onComplete) onComplete();
       } else {
-        Swal.fire({
-          title: "Error",
-          text: data.message,
-          icon: "error",
-          background: "var(--bg-secondary)",
-          color: "var(--text-main)",
-          confirmButtonColor: "var(--accent)",
-        });
+        swalError("Error", data.message);
       }
     } catch (err) {
       console.error(err);
     }
   };
 
+  // Delete single local episode file
+  const handleDeleteEpisode = async (epNum, subdub) => {
+    await handleLocalDeleteFlow({
+      numbers: [epNum],
+      subdub,
+      confirmTitle: "Delete Episode?",
+      confirmText: `Delete downloaded file for Episode ${epNum} (${subdub})?`,
+      confirmBtn: "Yes, delete it",
+      successTitle: "Deleted",
+      successText: "Episode file deleted.",
+      onComplete: () => fetchDetails(),
+    });
+  };
+
   // Delete single local manga chapter file
   const handleDeleteChapter = async (chapNum) => {
-    const confirmResult = await Swal.fire({
-      title: "Delete Chapter?",
-      text: `Delete downloaded file for Chapter ${chapNum}?`,
-      icon: "warning",
-      showCancelButton: true,
-      confirmButtonText: "Yes, delete it",
-      cancelButtonText: "Cancel",
-      background: "var(--bg-secondary)",
-      color: "var(--text-main)",
-      confirmButtonColor: "var(--danger)",
-      cancelButtonColor: "var(--bg-tertiary)",
+    await handleLocalDeleteFlow({
+      numbers: [chapNum],
+      confirmTitle: "Delete Chapter?",
+      confirmText: `Delete downloaded file for Chapter ${chapNum}?`,
+      confirmBtn: "Yes, delete it",
+      successTitle: "Deleted",
+      successText: "Chapter file deleted.",
+      onComplete: () => fetchDetails(),
     });
-    if (!confirmResult.isConfirmed) return;
-    try {
-      const response = await fetch("/api/local/delete", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id, type, numbers: [chapNum] }),
-      });
-      const data = await response.json();
-      if (!data.error) {
-        Swal.fire({
-          title: "Deleted",
-          text: "Chapter file deleted.",
-          icon: "success",
-          background: "var(--bg-secondary)",
-          color: "var(--text-main)",
-          confirmButtonColor: "var(--accent)",
-        });
-        fetchDetails(); // Reload metadata and checks
-      } else {
-        Swal.fire({
-          title: "Error",
-          text: data.message,
-          icon: "error",
-          background: "var(--bg-secondary)",
-          color: "var(--text-main)",
-          confirmButtonColor: "var(--accent)",
-        });
-      }
-    } catch (err) {
-      console.error(err);
-    }
   };
 
   // Bulk Delete Trigger
@@ -1775,56 +1652,19 @@ export default function InfoView({
     if (selectedDownloaded.length === 0) return;
 
     const numbersToDelete = selectedDownloaded;
-    const confirmResult = await Swal.fire({
-      title: `Delete Selected ${isAnime ? "Episode(s)" : "Chapter(s)"}?`,
-      text: `Are you sure you want to delete ${numbersToDelete.length} downloaded ${isAnime ? "episode(s)" : "chapter(s)"}?`,
-      icon: "warning",
-      showCancelButton: true,
-      confirmButtonText: "Yes, delete",
-      cancelButtonText: "Cancel",
-      background: "var(--bg-secondary)",
-      color: "var(--text-main)",
-      confirmButtonColor: "var(--danger)",
-      cancelButtonColor: "var(--bg-tertiary)",
-    });
-    if (!confirmResult.isConfirmed) return;
-
-    try {
-      const response = await fetch("/api/local/delete", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          id,
-          type,
-          numbers: numbersToDelete,
-          ...(isAnime ? { subdub: dubSelect } : {}),
-        }),
-      });
-      const data = await response.json();
-      if (!data.error) {
-        Swal.fire({
-          title: "Deleted",
-          text: `Successfully deleted ${numbersToDelete.length} ${isAnime ? "episode(s)" : "chapter(s)"}.`,
-          icon: "success",
-          background: "var(--bg-secondary)",
-          color: "var(--text-main)",
-          confirmButtonColor: "var(--accent)",
-        });
+    await handleLocalDeleteFlow({
+      numbers: numbersToDelete,
+      subdub: isAnime ? dubSelect : undefined,
+      confirmTitle: `Delete Selected ${isAnime ? "Episode(s)" : "Chapter(s)"}?`,
+      confirmText: `Are you sure you want to delete ${numbersToDelete.length} downloaded ${isAnime ? "episode(s)" : "chapter(s)"}?`,
+      confirmBtn: "Yes, delete",
+      successTitle: "Deleted",
+      successText: `Successfully deleted ${numbersToDelete.length} ${isAnime ? "episode(s)" : "chapter(s)"}.`,
+      onComplete: () => {
         setSelectedItems(new Set());
-        fetchDetails(); // Reload metadata and checks
-      } else {
-        Swal.fire({
-          title: "Error",
-          text: data.message,
-          icon: "error",
-          background: "var(--bg-secondary)",
-          color: "var(--text-main)",
-          confirmButtonColor: "var(--accent)",
-        });
-      }
-    } catch (err) {
-      console.error(err);
-    }
+        fetchDetails();
+      },
+    });
   };
 
   const isItemUnavailable = (item) => {
@@ -2281,6 +2121,7 @@ export default function InfoView({
                       infoSortOrder: newOrder,
                     }),
                   }).catch((e) => console.error(e));
+
                   const isAnimePahe =
                     details?.provider?.toLowerCase() === "animepahe" ||
                     details?.provider?.toLowerCase() === "pahe";

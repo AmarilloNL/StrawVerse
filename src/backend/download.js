@@ -1,4 +1,5 @@
-// imports
+const path = require("path");
+const fs = require("fs");
 const {
   animeinfo,
   MangaInfo,
@@ -6,6 +7,10 @@ const {
   fetchChapters,
 } = require("./utils/AnimeManga");
 const { providerFetch, settingfetch } = require("./utils/settings");
+const { getDownloadsFolder } = require("./utils/DirectoryMaker");
+const { logger } = require("./utils/AppLogger");
+const { queryOne } = require("./utils/db");
+const ImageCacheManager = require("./utils/ImageCacheManager");
 const {
   addToQueue,
   checkEpisodeDownload,
@@ -466,9 +471,76 @@ async function fetchAllChapters(Mangaprovider, mangaid) {
   return allChs;
 }
 
+async function getBaseDownloadDir() {
+  const setting = await settingfetch();
+  return setting?.CustomDownloadLocation || (await getDownloadsFolder());
+}
+
+async function cleanupEmptyDownloadFolder(folderPath, type, id) {
+  try {
+    const remaining = await fs.promises.readdir(folderPath);
+    if (remaining.length === 0) {
+      await fs.promises.rmdir(folderPath);
+      logger.info(`Removed empty download folder: ${folderPath}`);
+      if (id) {
+        try {
+          global.db.prepare(`DELETE FROM ${type} WHERE id = ?`).run(id);
+          logger.info(`Cleaned up DB entry for ${type}: ${id}`);
+        } catch (_) {}
+      }
+    }
+  } catch (_) {}
+}
+
+function wrapImagesInObject(obj) {
+  if (!obj) return obj;
+  if (Array.isArray(obj)) {
+    return obj.map((item) => wrapImagesInObject(item));
+  }
+  if (typeof obj === "object") {
+    const newObj = { ...obj };
+    if (Array.isArray(newObj.results)) {
+      newObj.results = newObj.results.map((item) => wrapImagesInObject(item));
+    }
+    if (typeof newObj.image === "string") {
+      let imgUrl = newObj.image;
+      if (imgUrl.startsWith("/api/image?url=")) {
+        imgUrl = decodeURIComponent(imgUrl.split("/api/image?url=")[1]);
+      }
+      if (
+        imgUrl.startsWith("http://") ||
+        imgUrl.startsWith("https://") ||
+        imgUrl.startsWith("file://")
+      ) {
+        if (imgUrl.startsWith("http://") || imgUrl.startsWith("https://")) {
+          try {
+            const cached = queryOne(
+              "SELECT filename FROM ImageCache WHERE url = ?",
+              [imgUrl],
+            );
+            if (cached) {
+              const cacheDir = ImageCacheManager.getImageCacheDir();
+              const localPath = path.join(cacheDir, cached.filename);
+              if (fs.existsSync(localPath)) {
+                imgUrl = "file://" + localPath;
+              }
+            }
+          } catch (_) {}
+        }
+        newObj.image = `/api/image?url=${encodeURIComponent(imgUrl)}`;
+      }
+    }
+    return newObj;
+  }
+  return obj;
+}
+
 module.exports = {
   downloadAnimeSingle,
   downloadAnimeMulti,
   downloadMangaSingle,
   downloadMangaMulti,
+  getBaseDownloadDir,
+  cleanupEmptyDownloadFolder,
+  wrapImagesInObject,
 };

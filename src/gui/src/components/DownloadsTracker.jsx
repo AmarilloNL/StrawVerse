@@ -123,22 +123,7 @@ export default function DownloadsTracker() {
         </div>
       </header>
 
-      {/* Paused Banner indicator */}
-      {isPaused && (
-        <div className="queue-paused-banner glass-panel">
-          <div className="paused-banner-left">
-            <Pause size={20} className="paused-icon" />
-            <div>
-              <h4 className="paused-banner-title">Download Queue is Paused</h4>
-              <p className="paused-banner-sub">Items will wait in queue until you click Start Queue.</p>
-            </div>
-          </div>
-          <button onClick={handleTogglePause} className="btn-resume-now">
-            <Play size={16} />
-            <span>Start Queue</span>
-          </button>
-        </div>
-      )}
+
 
       {/* Active Downloading Progress */}
       {activeTask ? (

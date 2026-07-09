@@ -9,8 +9,9 @@ import {
   Link as LinkIcon,
 } from "lucide-react";
 import Swal from "sweetalert2";
-import watchTogetherClient from "../utils/watchTogetherClient";
-import "./css/SettingsView.css";
+import watchTogetherClient from "../../utils/watchTogetherClient";
+import SettingsRow from "./SettingsRow";
+import "../css/SettingsView.css";
 
 export default function SettingsView({
   initialTab = "general",
@@ -706,45 +707,33 @@ export default function SettingsView({
                   </div>
                 </div>
 
-                <div className="settings-row-item">
-                  <div className="settings-row-info">
-                    <div className="settings-row-label">Developer Mode</div>
-                    <div className="settings-row-hint">
-                      Enable advanced logs viewer tab and debug utilities.
-                    </div>
-                  </div>
-                  <div className="settings-row-control">
-                    <select
-                      value={developerMode}
-                      onChange={(e) => setDeveloperMode(e.target.value)}
-                      className="settings-select"
-                    >
-                      <option value="on">Enabled</option>
-                      <option value="off">Disabled</option>
-                    </select>
-                  </div>
-                </div>
+                <SettingsRow
+                  label="Developer Mode"
+                  desc="Enable advanced logs viewer tab and debug utilities."
+                >
+                  <select
+                    value={developerMode}
+                    onChange={(e) => setDeveloperMode(e.target.value)}
+                    className="settings-select"
+                  >
+                    <option value="on">Enabled</option>
+                    <option value="off">Disabled</option>
+                  </select>
+                </SettingsRow>
 
-                <div className="settings-row-item">
-                  <div className="settings-row-info">
-                    <div className="settings-row-label">
-                      Pagination Controls
-                    </div>
-                    <div className="settings-row-hint">
-                      Toggle between numbered pages or infinite scroll loading.
-                    </div>
-                  </div>
-                  <div className="settings-row-control">
-                    <select
-                      value={pagination}
-                      onChange={(e) => setPagination(e.target.value)}
-                      className="settings-select"
-                    >
-                      <option value="on">Enabled (Page Buttons)</option>
-                      <option value="off">Disabled (Infinite Scroll)</option>
-                    </select>
-                  </div>
-                </div>
+                <SettingsRow
+                  label="Pagination Controls"
+                  desc="Toggle between numbered pages or infinite scroll loading."
+                >
+                  <select
+                    value={pagination}
+                    onChange={(e) => setPagination(e.target.value)}
+                    className="settings-select"
+                  >
+                    <option value="on">Enabled (Page Buttons)</option>
+                    <option value="off">Disabled (Infinite Scroll)</option>
+                  </select>
+                </SettingsRow>
               </div>
 
               {/* Watch Together Settings */}

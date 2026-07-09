@@ -5,6 +5,8 @@ const crypto = require("crypto");
 const JSZip = require("jszip");
 const axios = require("axios");
 const fs = require("fs");
+const path = require("path");
+const { providerFetch } = require("./settings");
 const { getHeaders } = require("./proxyHeaders");
 
 const cache = new NodeCache({ stdTTL: 60, checkperiod: 60 });
@@ -466,6 +468,98 @@ function invalidateCache(type, providerName, id) {
   cache.del(cacheKey);
 }
 
+async function getProviderOrThrow(type, name) {
+  const pObj = await providerFetch(type, name);
+  if (!pObj?.provider) {
+    throw new Error(name ? `Provider ${name} not found!` : "Missing Provider!");
+  }
+  return pObj;
+}
+
+function resolveDownloadFolder(type, id, subdub, baseDir) {
+  let typeDir = path.join(baseDir, type, id);
+
+  if (!fs.existsSync(typeDir)) {
+    const idStripped = id.replace(/-(dub|sub|hsub|both)$/, "");
+
+    if (type === "Anime") {
+      const downloads = global.db
+        .prepare(
+          "SELECT * FROM Anime WHERE id = ? OR id = ? OR id = ? OR id = ? OR id = ?",
+        )
+        .all(
+          subdub ? `${idStripped}-${subdub}` : id,
+          id,
+          `${idStripped}-sub`,
+          `${idStripped}-hsub`,
+          idStripped,
+        );
+      if (downloads && downloads.length > 0) {
+        const candidateFolders = new Set();
+        for (const d of downloads) {
+          const fn = d.folder_name || d.title?.replace(/[^a-zA-Z0-9]/g, "_");
+          if (fn) {
+            candidateFolders.add(fn);
+            if (subdub) candidateFolders.add(`${fn}_${subdub}`);
+            for (const s of ["sub", "dub", "hsub"]) {
+              candidateFolders.add(`${fn}_${s}`);
+            }
+          }
+        }
+        const refTitle = downloads[0].title;
+        if (refTitle) {
+          const titleFallback = global.db
+            .prepare("SELECT * FROM Anime WHERE title = ? OR title = ?")
+            .all(refTitle, subdub ? `${refTitle} ${subdub}` : refTitle);
+          for (const d of titleFallback || []) {
+            const fn = d.folder_name || d.title?.replace(/[^a-zA-Z0-9]/g, "_");
+            if (fn) {
+              candidateFolders.add(fn);
+              if (subdub) candidateFolders.add(`${fn}_${subdub}`);
+            }
+          }
+        }
+        let foundFolder = null;
+        for (const candidate of candidateFolders) {
+          if (fs.existsSync(path.join(baseDir, "Anime", candidate))) {
+            foundFolder = candidate;
+            break;
+          }
+        }
+        if (foundFolder) {
+          typeDir = path.join(baseDir, "Anime", foundFolder);
+        } else {
+          const folderName =
+            downloads[0].folder_name ||
+            downloads[0].title?.replace(/[^a-zA-Z0-9]/g, "_");
+          typeDir = path.join(baseDir, "Anime", folderName);
+        }
+      }
+    } else {
+      const downloads = global.db
+        .prepare("SELECT * FROM Manga WHERE id = ? OR id = ?")
+        .all(id, idStripped);
+      if (downloads && downloads.length > 0) {
+        const existingDownload = downloads.find((d) => {
+          const folderName =
+            d.folder_name || d.title?.replace(/[^a-zA-Z0-9]/g, "_");
+          return (
+            folderName && fs.existsSync(path.join(baseDir, "Manga", folderName))
+          );
+        });
+        const folderName =
+          (existingDownload || downloads[0]).folder_name ||
+          (existingDownload || downloads[0]).title?.replace(
+            /[^a-zA-Z0-9]/g,
+            "_",
+          );
+        typeDir = path.join(baseDir, "Manga", folderName);
+      }
+    }
+  }
+  return typeDir;
+}
+
 module.exports = {
   latestAnime,
   animesearch,
@@ -479,4 +573,6 @@ module.exports = {
   DownloadChapters,
   fetchChapters,
   invalidateCache,
+  getProviderOrThrow,
+  resolveDownloadFolder,
 };

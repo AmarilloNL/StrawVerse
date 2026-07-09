@@ -593,7 +593,7 @@ export default function VideoPlayer({
 
   useEffect(() => {
     const fetchSkipTimes = async () => {
-      if (isCurrentDownloaded) {
+      if (skipTimes && skipTimes.length > 0) {
         return;
       }
       if (!malid) {

@@ -125,7 +125,9 @@ async function settingupdate({
   }
 
   if (infoSortOrder === null) {
-    infoSortOrder = currentSettings?.infoSortOrder || "asc";
+    infoSortOrder = currentSettings?.hasOwnProperty("infoSortOrder")
+      ? currentSettings.infoSortOrder
+      : null;
   }
 
   config.quality = quality;
@@ -286,7 +288,7 @@ async function SettingsLoad() {
             malDiscordProfile: "off",
             imageCacheSizeLimit: 5,
             developerMode: "off",
-            infoSortOrder: "asc",
+            infoSortOrder: null,
           };
 
     if (config && !config.hasOwnProperty("imageCacheSizeLimit")) {

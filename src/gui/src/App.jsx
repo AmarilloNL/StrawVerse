@@ -6,7 +6,7 @@ import VideoPlayer from "./components/VideoPlayer";
 import MangaReader from "./components/MangaReader";
 import DownloadsTracker from "./components/DownloadsTracker";
 import LogsView from "./components/LogsView";
-import SettingsView from "./components/SettingsView";
+import SettingsView from "./components/settings/SettingsView";
 import Marketplace from "./components/Marketplace";
 import WatchTogetherView from "./components/WatchTogetherView";
 import WatchTogetherBar from "./components/WatchTogetherBar";
@@ -21,7 +21,7 @@ export default function App() {
   const [whatsNewVersion, setWhatsNewVersion] = useState("");
   const [whatsNewDate, setWhatsNewDate] = useState("");
   const [toasts, setToasts] = useState([]);
-  const [infoSortOrder, setInfoSortOrder] = useState("asc");
+  const [infoSortOrder, setInfoSortOrder] = useState(null);
 
   const showToast = (title, body, icon) => {
     const id = Date.now();
@@ -105,9 +105,7 @@ export default function App() {
         return (
           <span className="changelog-shortcut-row u-style-3">
             <span className="changelog-keys-wrapper">{renderedKeys}</span>
-            <span className="kbd-desc-separator u-style-4">
-              :
-            </span>
+            <span className="kbd-desc-separator u-style-4">:</span>
             <span className="changelog-desc">
               {parseInlineMarkdown(descPart)}
             </span>
@@ -133,7 +131,13 @@ export default function App() {
 
       if (match[1] && match[2]) {
         parts.push(
-          <a key={`link-${matchIndex}`} href={match[2]} target="_blank" rel="noopener noreferrer" className="u-style-5">
+          <a
+            key={`link-${matchIndex}`}
+            href={match[2]}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="u-style-5"
+          >
             {match[1]}
           </a>,
         );
@@ -223,7 +227,7 @@ export default function App() {
       const settingsData = await settingsRes.json();
       setMalLoggedIn(settingsData.MalLoggedIn || false);
       setDeveloperMode(settingsData.settings?.developerMode || "off");
-      setInfoSortOrder(settingsData.settings?.infoSortOrder || "asc");
+      setInfoSortOrder(settingsData.settings?.infoSortOrder || null);
     } catch (err) {
       console.error("Failed to sync app info:", err);
     }
@@ -479,9 +483,7 @@ export default function App() {
         developerMode={developerMode}
         onOpenWatchTogether={() => setIsWTModalOpen(true)}
       />
-      <main className="u-style-8">
-        {renderActiveView()}
-      </main>
+      <main className="u-style-8">{renderActiveView()}</main>
 
       {current.view !== "watch-together" && (
         <WatchTogetherBar onOpenModal={() => navigateTo("watch-together")} />

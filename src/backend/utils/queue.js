@@ -484,6 +484,9 @@ async function downloadVideo(
       headers: headers,
     });
   } catch (err) {
+    if (err.message === "Queue Paused") {
+      throw err;
+    }
     throw new Error(`Failed To Download \n${err}`);
   }
 }

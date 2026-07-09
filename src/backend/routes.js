@@ -18,6 +18,9 @@ const {
   downloadAnimeMulti,
   downloadMangaSingle,
   downloadMangaMulti,
+  getBaseDownloadDir,
+  cleanupEmptyDownloadFolder,
+  wrapImagesInObject,
 } = require("./download");
 const {
   latestMangas,
@@ -31,6 +34,8 @@ const {
   MangaChapterFetch,
   fetchChapters,
   invalidateCache,
+  getProviderOrThrow,
+  resolveDownloadFolder,
 } = require("./utils/AnimeManga");
 const { logger, getLogs, clearLogs } = require("./utils/AppLogger");
 const {
@@ -67,49 +72,6 @@ const { getHeaders } = require("./utils/proxyHeaders");
 const { getKeyValue, setKeyValue, queryOne, run } = require("./utils/db");
 const ImageCacheManager = require("./utils/ImageCacheManager");
 const segmentKeyCache = {};
-
-function wrapImagesInObject(obj) {
-  if (!obj) return obj;
-  if (Array.isArray(obj)) {
-    return obj.map((item) => wrapImagesInObject(item));
-  }
-  if (typeof obj === "object") {
-    const newObj = { ...obj };
-    if (Array.isArray(newObj.results)) {
-      newObj.results = newObj.results.map((item) => wrapImagesInObject(item));
-    }
-    if (typeof newObj.image === "string") {
-      let imgUrl = newObj.image;
-      if (imgUrl.startsWith("/api/image?url=")) {
-        imgUrl = decodeURIComponent(imgUrl.split("/api/image?url=")[1]);
-      }
-      if (
-        imgUrl.startsWith("http://") ||
-        imgUrl.startsWith("https://") ||
-        imgUrl.startsWith("file://")
-      ) {
-        if (imgUrl.startsWith("http://") || imgUrl.startsWith("https://")) {
-          try {
-            const cached = queryOne(
-              "SELECT filename FROM ImageCache WHERE url = ?",
-              [imgUrl],
-            );
-            if (cached) {
-              const cacheDir = ImageCacheManager.getImageCacheDir();
-              const localPath = path.join(cacheDir, cached.filename);
-              if (fs.existsSync(localPath)) {
-                imgUrl = "file://" + localPath;
-              }
-            }
-          } catch (_) {}
-        }
-        newObj.image = `/api/image?url=${encodeURIComponent(imgUrl)}`;
-      }
-    }
-    return newObj;
-  }
-  return obj;
-}
 
 // ===================== API routes =====================
 // Get settings data
@@ -487,13 +449,11 @@ router.post("/api/list/:AnimeManga/:provider/", async (req, res) => {
           filters?.tag,
         );
       } else if (provider === "provider") {
-        const pObj = await providerFetch("Anime");
-        if (!pObj?.provider) throw new Error("Missing Provider!");
+        const pObj = await getProviderOrThrow("Anime");
         data = await latestAnime(pObj, filters);
         data = { ...data, site: config.Animeprovider };
       } else if (provider === "search") {
-        const pObj = await providerFetch("Anime");
-        if (!pObj?.provider) throw new Error("Missing Provider!");
+        const pObj = await getProviderOrThrow("Anime");
         data = await animesearch(
           pObj,
           req?.query?.query || req?.body?.keyword,
@@ -501,8 +461,7 @@ router.post("/api/list/:AnimeManga/:provider/", async (req, res) => {
         );
         data = { ...data, site: config.Animeprovider };
       } else {
-        const pObj = await providerFetch("Anime", provider);
-        if (!pObj?.provider) throw new Error(`Provider ${provider} not found!`);
+        const pObj = await getProviderOrThrow("Anime", provider);
         const searchKeyword = req?.body?.keyword || req?.query?.query || "";
         if (searchKeyword) {
           data = await animesearch(pObj, searchKeyword, filters);
@@ -520,20 +479,17 @@ router.post("/api/list/:AnimeManga/:provider/", async (req, res) => {
           filters?.tag,
         );
       } else if (provider === "provider") {
-        const pObj = await providerFetch("Manga");
-        if (!pObj?.provider) throw new Error("Missing Provider!");
+        const pObj = await getProviderOrThrow("Manga");
         data = await latestMangas(pObj, filters?.page);
       } else if (provider === "search") {
-        const pObj = await providerFetch("Manga");
-        if (!pObj?.provider) throw new Error("Missing Provider!");
+        const pObj = await getProviderOrThrow("Manga");
         data = await MangaSearch(
           pObj,
           req?.query?.query || req?.body?.keyword,
           filters?.page,
         );
       } else {
-        const pObj = await providerFetch("Manga", provider);
-        if (!pObj?.provider) throw new Error(`Provider ${provider} not found!`);
+        const pObj = await getProviderOrThrow("Manga", provider);
         const searchKeyword = req?.body?.keyword || req?.query?.query || "";
         if (searchKeyword) {
           data = await MangaSearch(pObj, searchKeyword, filters?.page);
@@ -2443,9 +2399,7 @@ router.post("/api/local/tags/add", async (req, res) => {
           .prepare(`SELECT id, folder_name FROM ${type} WHERE MalID = ?`)
           .all(targetMalID);
 
-        const setting = await settingfetch();
-        const baseDir =
-          setting?.CustomDownloadLocation || (await getDownloadsFolder());
+        const baseDir = await getBaseDownloadDir();
 
         for (const row of rowsToClean) {
           const folderName = row.folder_name || "";
@@ -2491,9 +2445,7 @@ router.post("/api/local/tags/remove", async (req, res) => {
     const { id, type } = req.body;
     if (!id || !type) throw new Error("ID or Type is missing");
 
-    const setting = await settingfetch();
-    const baseDir =
-      setting?.CustomDownloadLocation || (await getDownloadsFolder());
+    const baseDir = await getBaseDownloadDir();
     let typeDir = path.join(baseDir, type, id);
 
     let dbRecord = null;
@@ -2684,22 +2636,6 @@ router.post("/api/cache/clear", async (req, res) => {
   }
 });
 
-async function cleanupEmptyDownloadFolder(folderPath, type, id) {
-  try {
-    const remaining = await fs.promises.readdir(folderPath);
-    if (remaining.length === 0) {
-      await fs.promises.rmdir(folderPath);
-      logger.info(`Removed empty download folder: ${folderPath}`);
-      if (id) {
-        try {
-          global.db.prepare(`DELETE FROM ${type} WHERE id = ?`).run(id);
-          logger.info(`Cleaned up DB entry for ${type}: ${id}`);
-        } catch (_) {}
-      }
-    }
-  } catch (_) {}
-}
-
 // Delete Local Episodes or Chapters
 router.post("/api/local/delete", async (req, res) => {
   try {
@@ -2708,92 +2644,8 @@ router.post("/api/local/delete", async (req, res) => {
       throw new Error("Missing or invalid parameters");
     }
 
-    const setting = await settingfetch();
-    const baseDir =
-      setting?.CustomDownloadLocation || (await getDownloadsFolder());
-
-    let typeDir = path.join(baseDir, type, id);
-
-    if (!fs.existsSync(typeDir)) {
-      const idStripped = id.replace(/-(dub|sub|hsub|both)$/, "");
-
-      if (type === "Anime") {
-        const downloads = global.db
-          .prepare(
-            "SELECT * FROM Anime WHERE id = ? OR id = ? OR id = ? OR id = ? OR id = ?",
-          )
-          .all(
-            subdub ? `${idStripped}-${subdub}` : id,
-            id,
-            `${idStripped}-sub`,
-            `${idStripped}-hsub`,
-            idStripped,
-          );
-        if (downloads && downloads.length > 0) {
-          const candidateFolders = new Set();
-          for (const d of downloads) {
-            const fn = d.folder_name || d.title?.replace(/[^a-zA-Z0-9]/g, "_");
-            if (fn) {
-              candidateFolders.add(fn);
-              if (subdub) candidateFolders.add(`${fn}_${subdub}`);
-              for (const s of ["sub", "dub", "hsub"]) {
-                candidateFolders.add(`${fn}_${s}`);
-              }
-            }
-          }
-          const refTitle = downloads[0].title;
-          if (refTitle) {
-            const titleFallback = global.db
-              .prepare("SELECT * FROM Anime WHERE title = ? OR title = ?")
-              .all(refTitle, subdub ? `${refTitle} ${subdub}` : refTitle);
-            for (const d of titleFallback || []) {
-              const fn =
-                d.folder_name || d.title?.replace(/[^a-zA-Z0-9]/g, "_");
-              if (fn) {
-                candidateFolders.add(fn);
-                if (subdub) candidateFolders.add(`${fn}_${subdub}`);
-              }
-            }
-          }
-          let foundFolder = null;
-          for (const candidate of candidateFolders) {
-            if (fs.existsSync(path.join(baseDir, "Anime", candidate))) {
-              foundFolder = candidate;
-              break;
-            }
-          }
-          if (foundFolder) {
-            typeDir = path.join(baseDir, "Anime", foundFolder);
-          } else {
-            const folderName =
-              downloads[0].folder_name ||
-              downloads[0].title?.replace(/[^a-zA-Z0-9]/g, "_");
-            typeDir = path.join(baseDir, "Anime", folderName);
-          }
-        }
-      } else {
-        const downloads = global.db
-          .prepare("SELECT * FROM Manga WHERE id = ? OR id = ?")
-          .all(id, idStripped);
-        if (downloads && downloads.length > 0) {
-          const existingDownload = downloads.find((d) => {
-            const folderName =
-              d.folder_name || d.title?.replace(/[^a-zA-Z0-9]/g, "_");
-            return (
-              folderName &&
-              fs.existsSync(path.join(baseDir, "Manga", folderName))
-            );
-          });
-          const folderName =
-            (existingDownload || downloads[0]).folder_name ||
-            (existingDownload || downloads[0]).title?.replace(
-              /[^a-zA-Z0-9]/g,
-              "_",
-            );
-          typeDir = path.join(baseDir, "Manga", folderName);
-        }
-      }
-    }
+    const baseDir = await getBaseDownloadDir();
+    let typeDir = resolveDownloadFolder(type, id, subdub, baseDir);
 
     if (!fs.existsSync(typeDir)) {
       throw new Error(`${type} folder not found on disk`);

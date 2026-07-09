@@ -1127,6 +1127,9 @@ async function download(args) {
     await obj.CheckSubtitles();
     await obj.MergeSegments();
   } catch (err) {
+    if (err.message === "Queue Paused") {
+      throw err;
+    }
     await obj.CleanEverything();
     console.log(err);
     logger.error(err);
