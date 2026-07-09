@@ -522,7 +522,7 @@ async function getAllMetadata(type, baseDir, page = 1, tag = null) {
     }
 
     // Group and merge entries by MalID
-    const groupedMetadata = [];
+    let groupedMetadata = [];
     const malIdGroups = {};
 
     storedMetadata.forEach((entry) => {

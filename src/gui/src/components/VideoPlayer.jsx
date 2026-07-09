@@ -347,26 +347,49 @@ export default function VideoPlayer({
     }
   };
 
+  // Dynamic page title & media metadata sync
+  useEffect(() => {
+    const originalTitle = document.title;
+    const cleanEp = typeof currentEpisode === "object" ? (currentEpisode.number || currentEpisode.id) : currentEpisode;
+    const displayTitle = animeTitle
+      ? `${animeTitle} - Ep ${cleanEp}`
+      : "StrawVerse Video";
+    
+    document.title = displayTitle;
+
+    if ("mediaSession" in navigator) {
+      navigator.mediaSession.metadata = new MediaMetadata({
+        title: displayTitle,
+        artist: "StrawVerse",
+        artwork: image ? [{ src: image, sizes: "512x512", type: "image/png" }] : [],
+      });
+    }
+
+    return () => {
+      document.title = originalTitle;
+    };
+  }, [animeTitle, currentEpisode, image]);
+
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
 
-    const originalTitle = document.title;
-
     const handleEnterPiP = () => {
       setIsPip(true);
-      const cleanEp =
-        typeof currentEpisode === "object"
-          ? currentEpisode.number || currentEpisode.id
-          : currentEpisode;
+      const cleanEp = typeof currentEpisode === "object" ? (currentEpisode.number || currentEpisode.id) : currentEpisode;
       const displayTitle = animeTitle
         ? `${animeTitle} - Ep ${cleanEp}`
         : "StrawVerse Video";
       document.title = `${displayTitle} (PiP)`;
     };
+
     const handleLeavePiP = () => {
       setIsPip(false);
-      document.title = originalTitle || "StrawVerse";
+      const cleanEp = typeof currentEpisode === "object" ? (currentEpisode.number || currentEpisode.id) : currentEpisode;
+      const displayTitle = animeTitle
+        ? `${animeTitle} - Ep ${cleanEp}`
+        : "StrawVerse Video";
+      document.title = displayTitle;
     };
 
     video.addEventListener("enterpictureinpicture", handleEnterPiP);
@@ -377,7 +400,6 @@ export default function VideoPlayer({
         video.removeEventListener("enterpictureinpicture", handleEnterPiP);
         video.removeEventListener("leavepictureinpicture", handleLeavePiP);
       }
-      document.title = originalTitle || "StrawVerse";
     };
   }, [selectedSource, animeTitle, currentEpisode]);
 
