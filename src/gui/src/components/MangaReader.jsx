@@ -105,14 +105,9 @@ export default function MangaReader({
     }
     saveWidthTimeoutRef.current = setTimeout(async () => {
       try {
-        const getRes = await fetch("/api/settings");
-        const data = await getRes.json();
-        const currentSettings = data?.settings || {};
-
-        await apiPost("/api/settings", {
-          ...currentSettings,
-          mangaReaderWidth: val,
-        });
+        if (window.sharedStateAPI && window.sharedStateAPI.updateSetting) {
+          await window.sharedStateAPI.updateSetting("mangaReaderWidth", val);
+        }
       } catch (err) {
         console.error("Failed to save reader width:", err);
       }
@@ -125,21 +120,24 @@ export default function MangaReader({
   useEffect(() => {
     const fetchSettings = async () => {
       try {
-        const response = await fetch("/api/settings");
-        const data = await response.json();
-        const s = data?.settings || data;
-        if (s) {
-          if (s.autoLoadNextChapter) {
-            setAutoLoadNext(s.autoLoadNextChapter === "on");
-          }
-          if (s.mangaReaderLayout) {
-            setReaderLayout(s.mangaReaderLayout);
-            localStorage.setItem("manga_reader_layout", s.mangaReaderLayout);
-          }
-          if (s.mangaReaderWidth) {
-            const widthVal = parseInt(s.mangaReaderWidth, 10);
-            setReaderWidth(widthVal);
-            localStorage.setItem("manga_reader_width", widthVal);
+        if (window.sharedStateAPI && window.sharedStateAPI.getSettings) {
+          const res = await window.sharedStateAPI.getSettings([
+            "autoLoadNextChapter",
+            "mangaReaderLayout",
+            "mangaReaderWidth",
+          ]);
+          const s = res?.settings;
+          if (s) {
+            setAutoLoadNext(s.autoLoadNextChapter);
+            if (s.mangaReaderLayout) {
+              setReaderLayout(s.mangaReaderLayout);
+              localStorage.setItem("manga_reader_layout", s.mangaReaderLayout);
+            }
+            if (s.mangaReaderWidth) {
+              const widthVal = parseInt(s.mangaReaderWidth, 10);
+              setReaderWidth(widthVal);
+              localStorage.setItem("manga_reader_width", widthVal);
+            }
           }
         }
       } catch (err) {

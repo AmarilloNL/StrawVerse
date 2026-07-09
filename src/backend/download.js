@@ -496,10 +496,40 @@ async function cleanupEmptyDownloadFolder(folderPath, type, id) {
         try {
           global.db.prepare(`DELETE FROM ${type} WHERE id = ?`).run(id);
           logger.info(`Cleaned up DB entry for ${type}: ${id}`);
+          removeIdFromCustomOrders(id);
         } catch (_) {}
       }
     }
   } catch (_) {}
+}
+
+function removeIdFromCustomOrders(deletedId) {
+  if (!global.db || !deletedId) return;
+  try {
+    const rows = global.db
+      .prepare("SELECT key, value FROM Settings WHERE key LIKE 'custom_order_%'")
+      .all();
+    for (const row of rows) {
+      if (row.value) {
+        try {
+          const orderArray = JSON.parse(row.value);
+          if (Array.isArray(orderArray) && orderArray.includes(deletedId)) {
+            const newOrder = orderArray.filter((id) => id !== deletedId);
+            global.db
+              .prepare("UPDATE Settings SET value = ? WHERE key = ?")
+              .run(JSON.stringify(newOrder), row.key);
+            logger.info(
+              `[customOrder] Cleaned up deleted ID ${deletedId} from settings key ${row.key}`,
+            );
+          }
+        } catch (jsonErr) {}
+      }
+    }
+  } catch (err) {
+    logger.error(
+      `Failed to clean up custom order settings for deleted ID ${deletedId}: ${err.message}`,
+    );
+  }
 }
 
 function wrapImagesInObject(obj) {

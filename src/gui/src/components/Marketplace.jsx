@@ -29,14 +29,21 @@ export default function Marketplace({ initialType }) {
       setExtensions(data[activeType] || []);
 
       // 2. Fetch locally installed scrapers from our Express settings
-      const settingsRes = await fetch("/api/settings");
-      const settingsData = await settingsRes.json();
-      setInstalledProviders(
-        settingsData.settings?.providers || { Anime: [], Manga: [] },
-      );
-      setInstalledVersions(
-        settingsData.settings?.installedExtensions || { Anime: [], Manga: [] },
-      );
+      if (window.sharedStateAPI && window.sharedStateAPI.getSettings) {
+        const settingsData = await window.sharedStateAPI.getSettings([
+          "providers",
+          "installedExtensions",
+        ]);
+        setInstalledProviders(
+          settingsData.settings?.providers || { Anime: [], Manga: [] },
+        );
+        setInstalledVersions(
+          settingsData.settings?.installedExtensions || {
+            Anime: [],
+            Manga: [],
+          },
+        );
+      }
     } catch (err) {
       console.error(err);
     } finally {

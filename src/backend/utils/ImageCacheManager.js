@@ -128,8 +128,7 @@ async function cacheImage(url, buffer = null) {
 
 async function enforceLimit() {
   try {
-    const settings = getKeyValue("Settings", "config") || {};
-    const limitGb = settings.imageCacheSizeLimit ?? 5;
+    const limitGb = getKeyValue("Settings", "imageCacheSizeLimit") ?? 5;
     const limitBytes = limitGb * 1024 * 1024 * 1024;
 
     const stats = getCacheStats();

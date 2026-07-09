@@ -18,7 +18,7 @@ export default function Sidebar({
   setView,
   isCollapsed,
   toggleCollapse,
-  developerMode = "off",
+  developerMode = false,
   onOpenWatchTogether,
 }) {
   const menuItems = [
@@ -37,7 +37,7 @@ export default function Sidebar({
 
   const filteredMenuItems = menuItems.filter((item) => {
     if (item.id === "logs") {
-      return developerMode === "on";
+      return developerMode;
     }
     return true;
   });

@@ -42,7 +42,6 @@ const {
   settingupdate,
   settingfetch,
   providerFetch,
-  getScraperIconsPath,
 } = require("./utils/settings");
 const {
   getQueue,
@@ -71,53 +70,10 @@ const { updateHistory } = require("./utils/history");
 const { getHeaders } = require("./utils/proxyHeaders");
 const { getKeyValue, setKeyValue, queryOne, run } = require("./utils/db");
 const ImageCacheManager = require("./utils/ImageCacheManager");
+const { UpdateDiscordRPC } = require("./utils/discord");
 const segmentKeyCache = {};
 
 // ===================== API routes =====================
-// Get settings data
-router.get("/api/settings", async (req, res) => {
-  try {
-    const setting = await settingfetch();
-    const settingsWithProviders = {
-      ...setting,
-      providers: {
-        Anime: global.Anime_providers
-          ? Object.keys(global.Anime_providers)
-          : [],
-        Manga: global.Manga_providers
-          ? Object.keys(global.Manga_providers)
-          : [],
-      },
-      installedExtensions: {
-        Anime: global.Anime_providers
-          ? Object.entries(global.Anime_providers).map(([key, val]) => ({
-              name: key,
-              version: val.version || "1.0.0",
-            }))
-          : [],
-        Manga: global.Manga_providers
-          ? Object.entries(global.Manga_providers).map(([key, val]) => ({
-              name: key,
-              version: val.version || "1.0.0",
-            }))
-          : [],
-      },
-    };
-    let url = null;
-    if (!setting.mal_on_off || setting.mal_on_off === null) {
-      url = await MalCreateUrl();
-    }
-    res.json({
-      settings: settingsWithProviders,
-      url: url,
-      MalLoggedIn: global.MalLoggedIn || false,
-      malUsername: setting?.malUsername || global.malUsername || null,
-    });
-  } catch (err) {
-    logger.error(err);
-    res.status(500).json({ error: err.message });
-  }
-});
 
 // Get application logs
 router.get("/api/logs", async (req, res) => {
@@ -164,41 +120,6 @@ router.get("/api/changelog", (req, res) => {
   }
 });
 
-// Get all loaded providers with icon hints — served from locally downloaded icons
-router.get("/api/providers", (req, res) => {
-  const toInfo = (name, scraper) => ({
-    name,
-    version: scraper?.version || null,
-    icon: scraper?.logo || `/api/extension-icon/${encodeURIComponent(name)}`,
-  });
-  res.json({
-    Anime: Object.entries(global.Anime_providers || {}).map(([n, s]) =>
-      toInfo(n, s),
-    ),
-    Manga: Object.entries(global.Manga_providers || {}).map(([n, s]) =>
-      toInfo(n, s),
-    ),
-  });
-});
-
-// Serve a locally-cached extension icon
-router.get("/api/extension-icon/:name", (req, res) => {
-  try {
-    const iconsDir = getScraperIconsPath();
-    if (!iconsDir) return res.status(404).end();
-    const safeName = req.params.name.replace(/[^a-zA-Z0-9_-]/g, "");
-    const iconFile = path.join(iconsDir, `${safeName}.ico`);
-    if (fs.existsSync(iconFile)) {
-      res.setHeader("Content-Type", "image/x-icon");
-      res.setHeader("Cache-Control", "public, max-age=86400");
-      return res.sendFile(iconFile, { dotfiles: "allow" });
-    }
-    res.status(404).end();
-  } catch (err) {
-    res.status(500).end();
-  }
-});
-
 // Handles Mal Login
 router.get("/mal/callback", async (req, res) => {
   code = req.query.code;
@@ -223,76 +144,6 @@ router.get("/mal/logout", async (req, res) => {
   global.MalLoggedIn = false;
 
   return res.send("logged out!");
-});
-
-// Handles Settings update
-router.post("/api/settings", async (req, res) => {
-  const {
-    status,
-    quality,
-    CustomDownloadLocation,
-    Animeprovider,
-    Mangaprovider,
-    Pagination,
-    autoLoadNextChapter,
-    enableDiscordRPC,
-    mergeSubtitles,
-    subtitleFormat,
-    malDiscordProfile,
-    imageCacheSizeLimit,
-    developerMode,
-    autoSkipIntro,
-    mangaReaderLayout,
-    mangaReaderWidth,
-    infoSortOrder,
-  } = req.body;
-  try {
-    if (
-      status &&
-      status !== "watching" &&
-      status !== "dropped" &&
-      status !== "completed" &&
-      status !== "on_hold" &&
-      status !== "plan_to_watch"
-    )
-      return res.status(400).json({ error: "Enter a valid status." });
-
-    if (
-      quality &&
-      quality !== "1080p" &&
-      quality !== "720p" &&
-      quality !== "360p"
-    )
-      return res.status(400).json({ error: "Enter a valid quality." });
-
-    if (CustomDownloadLocation && CustomDownloadLocation !== null)
-      await ensureDirectoryExists(CustomDownloadLocation);
-
-    await settingupdate({
-      quality: quality,
-      CustomDownloadLocation: CustomDownloadLocation,
-      Animeprovider: Animeprovider,
-      Mangaprovider: Mangaprovider,
-      Pagination: Pagination,
-      autoLoadNextChapter: autoLoadNextChapter,
-      enableDiscordRPC: enableDiscordRPC,
-      mergeSubtitles: mergeSubtitles,
-      subtitleFormat: subtitleFormat,
-      malDiscordProfile: malDiscordProfile,
-      imageCacheSizeLimit: imageCacheSizeLimit,
-      developerMode: developerMode,
-      autoSkipIntro: autoSkipIntro,
-      mangaReaderLayout: mangaReaderLayout,
-      mangaReaderWidth: mangaReaderWidth,
-      infoSortOrder: infoSortOrder,
-    });
-
-    res.status(200).json({ message: "Settings saved successfully." });
-  } catch (err) {
-    const errorMessage = err.message.split("\n")[0];
-    logger.error(`Error Updating Settings: \n${err}`);
-    res.status(400).json({ error: errorMessage });
-  }
 });
 
 // Handles Download Progress & Sends To FrontEnd
@@ -509,7 +360,6 @@ router.post("/api/list/:AnimeManga/:provider/", async (req, res) => {
 
     if (data?.results && data.results.length > 0) {
       try {
-        const { getKeyValue } = require("./utils/db");
         const orderKey = `custom_order_${AnimeManga}_${provider}_${filters?.tag || "all"}`;
         const savedOrder = getKeyValue("Settings", orderKey);
         if (savedOrder && Array.isArray(savedOrder) && savedOrder.length > 0) {
@@ -549,7 +399,7 @@ router.get("/api/schedule/weekly", async (req, res) => {
     const now = Math.floor(Date.now() / 1000);
     const oneWeekLater = now + 7 * 24 * 3600;
 
-    const episodes = global.db
+    const episodes = global.mappingDb
       .prepare(
         `
         SELECT livechart_id, episode, date, title, image FROM next_episodes 
@@ -576,14 +426,12 @@ router.get("/api/schedule/weekly", async (req, res) => {
         }
       }
 
-      if (malid) {
-        enriched.push({
-          ...ep,
-          malid,
-          title: ep.title || `MAL ${malid}`,
-          image: ep.image || "",
-        });
-      }
+      enriched.push({
+        ...ep,
+        malid,
+        title: ep.title || (malid ? `MAL ${malid}` : "Unknown Anime"),
+        image: ep.image || "",
+      });
     }
 
     res.json({
@@ -890,12 +738,19 @@ router.post("/api/info/:AnimeManga/:LocalMalProvider", async (req, res) => {
             Animeprovider.provider_name === "pahe"
               ? id
               : id.replace(/-(dub|sub|hsub|both)$/, "");
-          let AnimeInfo = await animeinfo(
-            Animeprovider,
-            setting?.CustomDownloadLocation,
-            lookupId,
-            data?.provider ? false : true,
-          );
+          let AnimeInfo = null;
+          try {
+            AnimeInfo = await animeinfo(
+              Animeprovider,
+              setting?.CustomDownloadLocation,
+              lookupId,
+              data?.provider ? false : true,
+            );
+          } catch (fetchErr) {
+            logger.warn(
+              `Failed to fetch initial online metadata for ${lookupId}: ${fetchErr.message}`,
+            );
+          }
 
           // pahe keeps on updating uuids
           if (
@@ -1005,7 +860,7 @@ router.post("/api/info/:AnimeManga/:LocalMalProvider", async (req, res) => {
             try {
               global.db
                 .prepare(
-                  `UPDATE Anime SET description = ?, status = ?, genres = ?, aired = ?, image_url = ?, EpisodesDataId = ?, provider = ?, last_updated = CURRENT_TIMESTAMP WHERE id = ?`,
+                  `UPDATE Anime SET description = ?, status = ?, genres = ?, aired = ?, image_url = ?, provider = ?, last_updated = CURRENT_TIMESTAMP WHERE id = ?`,
                 )
                 .run(
                   AnimeInfo.description || "",
@@ -1015,7 +870,6 @@ router.post("/api/info/:AnimeManga/:LocalMalProvider", async (req, res) => {
                     : AnimeInfo.genres || "",
                   AnimeInfo.aired || "",
                   AnimeInfo.image_url || AnimeInfo.image || "",
-                  AnimeInfo.dataId || null,
                   Animeprovider.provider_name,
                   id,
                 );
@@ -1324,7 +1178,7 @@ router.post("/api/info/:AnimeManga/:LocalMalProvider", async (req, res) => {
               if (mappingRow.livechart_id) {
                 const livechartId = mappingRow.livechart_id;
                 const now = Math.floor(Date.now() / 1000);
-                const nextEp = global.db
+                const nextEp = global.mappingDb
                   .prepare(
                     `
                     SELECT episode, date FROM next_episodes 
@@ -1510,7 +1364,6 @@ router.post("/api/local/reorder", async (req, res) => {
   try {
     const { key, order } = req.body;
     if (key && Array.isArray(order)) {
-      const { setKeyValue } = require("./utils/db");
       setKeyValue("Settings", `custom_order_${key}`, order);
     }
     return res.json({ success: true });
@@ -2726,7 +2579,6 @@ router.post("/api/local/delete", async (req, res) => {
 // Reset Discord RPC to Idle (called when leaving player/reader)
 router.post("/api/discord/reset", async (req, res) => {
   try {
-    const { UpdateDiscordRPC } = require("./utils/discord");
     UpdateDiscordRPC().catch(() => {});
     res.json({ success: true });
   } catch (err) {

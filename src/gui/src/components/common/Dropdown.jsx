@@ -42,9 +42,28 @@ export default function Dropdown({
       <div
         className={`custom-dropdown-trigger ${isOpen ? "open" : ""} ${triggerClassName}`}
         onClick={() => setIsOpen(!isOpen)}
+        style={{ display: "flex", alignItems: "center", gap: "8px" }}
       >
-        <span className="custom-dropdown-trigger-text">{displayText}</span>
-        <ChevronDown className="custom-dropdown-chevron" size={16} />
+        {selectedOption?.icon && (
+          <img
+            src={selectedOption.icon}
+            alt=""
+            style={{
+              width: "16px",
+              height: "16px",
+              borderRadius: "3px",
+              objectFit: "contain",
+            }}
+          />
+        )}
+        <span className="custom-dropdown-trigger-text" style={{ flex: 1 }}>
+          {displayText}
+        </span>
+        <ChevronDown
+          className="custom-dropdown-chevron"
+          size={16}
+          style={{ flexShrink: 0 }}
+        />
       </div>
 
       {isOpen && (
@@ -57,8 +76,21 @@ export default function Dropdown({
                 onChange(opt.value);
                 setIsOpen(false);
               }}
+              style={{ display: "flex", alignItems: "center", gap: "8px" }}
             >
-              {opt.label}
+              {opt.icon && (
+                <img
+                  src={opt.icon}
+                  alt=""
+                  style={{
+                    width: "16px",
+                    height: "16px",
+                    borderRadius: "3px",
+                    objectFit: "contain",
+                  }}
+                />
+              )}
+              <span>{opt.label}</span>
             </div>
           ))}
         </div>

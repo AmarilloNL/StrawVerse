@@ -19,7 +19,7 @@ import {
 import Swal from "sweetalert2";
 import { swalSuccess, swalError, swalConfirm } from "../utils/swal";
 import { apiPost } from "../utils/common";
-import Dropdown from "./Dropdown";
+import Dropdown from "./common/Dropdown";
 import "./css/InfoView.css";
 
 export default function InfoView({
@@ -253,6 +253,30 @@ export default function InfoView({
   const providerDropdownRef = useRef(null);
   const [isMalStatusDropdownOpen, setIsMalStatusDropdownOpen] = useState(false);
   const malStatusDropdownRef = useRef(null);
+  const [installedExtensions, setInstalledExtensions] = useState(null);
+
+  useEffect(() => {
+    if (window.sharedStateAPI && window.sharedStateAPI.getSettings) {
+      window.sharedStateAPI
+        .getSettings(["installedExtensions"])
+        .then((settingsData) => {
+          setInstalledExtensions(
+            settingsData.settings?.installedExtensions || null,
+          );
+        })
+        .catch((err) =>
+          console.error("Failed to load extensions for icons:", err),
+        );
+    }
+  }, []);
+
+  const getProviderIcon = (name) => {
+    if (!name || !installedExtensions) return null;
+    const list = installedExtensions[type];
+    const ext = list?.find((e) => e.name === name);
+    return ext?.icon || null;
+  };
+
   const hasAutoPlayed = useRef(false);
 
   const fetchDetails = async (isInitial = false) => {
@@ -1913,13 +1937,34 @@ export default function InfoView({
                         onClick={() =>
                           setIsProviderDropdownOpen(!isProviderDropdownOpen)
                         }
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "8px",
+                        }}
                       >
-                        <span className="custom-dropdown-trigger-text">
+                        {getProviderIcon(details.provider) && (
+                          <img
+                            src={getProviderIcon(details.provider)}
+                            alt=""
+                            style={{
+                              width: "16px",
+                              height: "16px",
+                              borderRadius: "3px",
+                              objectFit: "contain",
+                            }}
+                          />
+                        )}
+                        <span
+                          className="custom-dropdown-trigger-text"
+                          style={{ flex: 1 }}
+                        >
                           {details.provider}
                         </span>
                         <ChevronDown
                           className="custom-dropdown-chevron"
                           size={16}
+                          style={{ flexShrink: 0 }}
                         />
                       </div>
 
@@ -1951,8 +1996,25 @@ export default function InfoView({
                                   }
                                   setIsProviderDropdownOpen(false);
                                 }}
+                                style={{
+                                  display: "flex",
+                                  alignItems: "center",
+                                  gap: "8px",
+                                }}
                               >
-                                {p.provider}
+                                {getProviderIcon(p.provider) && (
+                                  <img
+                                    src={getProviderIcon(p.provider)}
+                                    alt=""
+                                    style={{
+                                      width: "16px",
+                                      height: "16px",
+                                      borderRadius: "3px",
+                                      objectFit: "contain",
+                                    }}
+                                  />
+                                )}
+                                <span>{p.provider}</span>
                               </div>
                             ))}
                         </div>
@@ -2116,13 +2178,14 @@ export default function InfoView({
                 setSortOrder(newOrder);
                 if (newOrder !== "downloaded") {
                   localStorage.setItem("info_sort_order", newOrder);
-                  fetch("/api/settings", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                      infoSortOrder: newOrder,
-                    }),
-                  }).catch((e) => console.error(e));
+                  if (
+                    window.sharedStateAPI &&
+                    window.sharedStateAPI.updateSetting
+                  ) {
+                    window.sharedStateAPI
+                      .updateSetting("infoSortOrder", newOrder)
+                      .catch((e) => console.error(e));
+                  }
 
                   const isAnimePahe =
                     details?.provider?.toLowerCase() === "animepahe" ||

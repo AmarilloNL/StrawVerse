@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import watchTogetherClient from "../utils/watchTogetherClient";
+import watchTogetherClient from "../../utils/watchTogetherClient";
 import { Users, Radio, Copy, Check, LogOut } from "lucide-react";
 
 export default function WatchTogetherBar({ onOpenModal }) {

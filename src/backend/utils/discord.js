@@ -29,8 +29,7 @@ let rpcConnected = false;
 
 function isDiscordRPCEnabled() {
   try {
-    const config = getKeyValue("Settings", "config");
-    return config?.enableDiscordRPC === "on";
+    return getKeyValue("Settings", "enableDiscordRPC") === true;
   } catch (err) {
     return false;
   }
@@ -227,9 +226,10 @@ async function UpdateDiscordRPC(
     ],
   };
 
-  const cfg = getKeyValue("Settings", "config") || {};
-  const malProfileEnabled = cfg.malDiscordProfile === "on";
-  const malUsername = cfg.malUsername || global.malUsername || null;
+  const malProfileEnabled =
+    getKeyValue("Settings", "malDiscordProfile") === true;
+  const malUsername =
+    getKeyValue("Settings", "malUsername") || global.malUsername || null;
   const malProfileButton =
     malProfileEnabled && malUsername
       ? {

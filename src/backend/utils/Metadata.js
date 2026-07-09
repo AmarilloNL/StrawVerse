@@ -685,7 +685,7 @@ async function getAllMetadata(type, baseDir, page = 1, tag = null) {
     if (type === "Anime") {
       try {
         const now = Math.floor(Date.now() / 1000);
-        const upcomingRows = global.db
+        const upcomingRows = global.mappingDb
           .prepare(
             `
           SELECT livechart_id, episode, date 
@@ -703,7 +703,7 @@ async function getAllMetadata(type, baseDir, page = 1, tag = null) {
           }
         });
 
-        const maxAiredRows = global.db
+        const maxAiredRows = global.mappingDb
           .prepare(
             `
           SELECT livechart_id, MAX(episode) as max_aired 
@@ -1246,10 +1246,12 @@ async function getSourceById(type, baseDir, id, number, subdub) {
 
     let skipTimes = [];
     try {
-      const row = queryOne("SELECT skip_times FROM Anime WHERE id = ?", [id]);
+      const row = queryOne(
+        "SELECT skip_times FROM SkipTimes WHERE anime_id = ? AND episode_number = ? LIMIT 1",
+        [id, Number(number)],
+      );
       if (row && row.skip_times) {
-        const allSkipTimes = JSON.parse(row.skip_times);
-        skipTimes = allSkipTimes[String(number)] || [];
+        skipTimes = JSON.parse(row.skip_times) || [];
       }
     } catch (e) {
       // ignore

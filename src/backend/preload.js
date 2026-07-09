@@ -19,4 +19,9 @@ contextBridge.exposeInMainWorld("sharedStateAPI", {
   disableWhatsNew: () => ipcRenderer.invoke("disable-whats-new"),
   ensureCfBypass: (url, referer) =>
     ipcRenderer.invoke("ensure-cf-bypass", url, referer),
+  getSettings: (keys) => ipcRenderer.invoke("get-settings", keys),
+  updateSetting: (key, value) =>
+    ipcRenderer.invoke("update-setting", key, value),
+  updateSettings: (settingsObj) =>
+    ipcRenderer.invoke("update-settings", settingsObj),
 });

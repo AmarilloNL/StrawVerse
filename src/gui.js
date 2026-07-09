@@ -83,7 +83,7 @@ try {
 //  functions
 const { logger } = require("./backend/utils/AppLogger");
 const { getKeyValue, setKeyValue } = require("./backend/utils/db");
-const { runLiveChartScheduleIfNeeded } = require("./backend/utils/LiveChart");
+
 const { runStartupCleanup } = require("./backend/utils/ImageCacheManager");
 
 const {
@@ -374,8 +374,7 @@ const createWindow = () => {
 
   ipcMain.handle("check-whats-new", async () => {
     try {
-      const currentSettings = getKeyValue("Settings", "config") || {};
-      const showWhatsNew = !!currentSettings.showWhatsNew;
+      const showWhatsNew = !!getKeyValue("Settings", "showWhatsNew");
 
       let changelogContent = "";
       if (showWhatsNew) {
@@ -546,15 +545,11 @@ app.whenReady().then(async () => {
   await loadQueue();
   global.updatePowerSaveBlocker();
 
-  checkForMappingUpdates()
-    .then(() => {
-      return runLiveChartScheduleIfNeeded();
-    })
-    .catch((err) => {
-      logger.error(
-        `[databaseUpdater] Error during startup database updates: ${err.message}`,
-      );
-    });
+  checkForMappingUpdates().catch((err) => {
+    logger.error(
+      `[databaseUpdater] Error during startup database updates: ${err.message}`,
+    );
+  });
 
   await loadAllScrapers();
   globalShortcut.register("CommandOrControl+Shift+I", () => {});

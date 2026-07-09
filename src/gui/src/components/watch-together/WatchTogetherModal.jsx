@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
-import watchTogetherClient from "../utils/watchTogetherClient";
-import "./css/WatchTogetherModal.css";
+import watchTogetherClient from "../../utils/watchTogetherClient";
+import "../css/WatchTogetherModal.css";
 import {
   Users,
   Copy,

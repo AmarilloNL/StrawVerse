@@ -46,7 +46,7 @@ export default function Catalog({
   const [availableFilters, setAvailableFilters] = useState(null);
   const [errorMsg, setErrorMsg] = useState("");
   const [localTags, setLocalTags] = useState([]);
-  const [providerIconMap, setProviderIconMap] = useState({});
+
   const [linkingMalItem, setLinkingMalItem] = useState(null);
   const [stats, setStats] = useState(null);
   const [recentHistory, setRecentHistory] = useState([]);
@@ -371,22 +371,6 @@ export default function Catalog({
       setStats(null);
       setRecentHistory([]);
     }
-
-    if (provider === "local" || provider === "mal") {
-      // Fetch provider icons for local library badges
-      fetch("/api/providers")
-        .then((res) => res.json())
-        .then((data) => {
-          const map = {};
-          if (data) {
-            [...(data.Anime || []), ...(data.Manga || [])].forEach((p) => {
-              map[p.name] = p.icon || null;
-            });
-          }
-          setProviderIconMap(map);
-        })
-        .catch(() => {});
-    }
   }, [type, provider]);
 
   useEffect(() => {
@@ -457,11 +441,11 @@ export default function Catalog({
   useEffect(() => {
     const loadPaginationSettings = async () => {
       try {
-        const response = await fetch("/api/settings");
-        const resData = await response.json();
-        if (resData && resData.settings) {
-          const isInfinite = resData.settings.Pagination === "off";
-          setInfiniteScroll(isInfinite);
+        if (window.sharedStateAPI && window.sharedStateAPI.getSettings) {
+          const resData = await window.sharedStateAPI.getSettings([
+            "Pagination",
+          ]);
+          setInfiniteScroll(resData?.settings?.Pagination === false);
         }
       } catch (err) {
         console.error("Failed to load settings:", err);

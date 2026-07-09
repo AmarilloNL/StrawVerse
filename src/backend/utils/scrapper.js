@@ -114,10 +114,20 @@ function cookieMatchesDomain(cookieDomain, domain) {
 function saveClearanceCookie(cookie) {
   if (cookie.name !== "cf_clearance") return;
   const cookieDomain = normalizeHostname(cookie.domain);
+  const key = `${cookieDomain}-cf_clearance`;
+
+  try {
+    const existing = queryOne("SELECT value FROM cookie WHERE id = ? LIMIT 1", [
+      key,
+    ]);
+    if (existing && existing.value === cookie.value) {
+      return;
+    }
+  } catch (err) {}
+
   const expiry = cookie.expirationDate
     ? cookie.expirationDate * 1000
     : Date.now() + 1000 * 60 * 10;
-  const key = `${cookieDomain}-cf_clearance`;
   run(CF_CLEARANCE_UPSERT, [
     key,
     cookie.value,
@@ -429,9 +439,12 @@ global.cloudflarebypass = async (targetUrl, force = false, referer = null) => {
         if (referer) {
           await global.ScrapperWindow.loadURL(navUrl, {
             httpReferrer: referer,
+            timeout: 30000,
           });
         } else {
-          await global.ScrapperWindow.loadURL(navUrl);
+          await global.ScrapperWindow.loadURL(navUrl, {
+            timeout: 30000,
+          });
         }
       } catch (err) {}
 
@@ -660,7 +673,11 @@ async function electronNetAdapter(config) {
 }
 
 axios.defaults.proxy = false;
-global.axios = axios.create({ proxy: false, adapter: electronNetAdapter });
+global.axios = axios.create({
+  proxy: false,
+  adapter: electronNetAdapter,
+  timeout: 20000,
+});
 global.axios.interceptors.request.use(
   async (config) => {
     const headers = getHeaders(config.url, config.method);
@@ -711,7 +728,10 @@ global.axios.interceptors.response.use(
       return global
         .cloudflarebypass(response.config.url, true, referer)
         .then(() => {
-          const newHeaders = getHeaders(response.config.url, response.config.method);
+          const newHeaders = getHeaders(
+            response.config.url,
+            response.config.method,
+          );
           response.config.headers = {
             ...response.config.headers,
             ...newHeaders,

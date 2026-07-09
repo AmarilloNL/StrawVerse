@@ -22,11 +22,14 @@ const tables = {
     status: "TEXT",
     genres: "TEXT",
     aired: "TEXT",
-    EpisodesDataId: "TEXT",
     image_url: "TEXT",
     last_updated: "DATE",
     MalID: "TEXT",
     CustomTag: "TEXT",
+  },
+  SkipTimes: {
+    anime_id: "TEXT",
+    episode_number: "REAL",
     skip_times: "TEXT",
   },
   Manga: {
@@ -71,9 +74,21 @@ const tables = {
     key: "TEXT PRIMARY KEY",
     value: "TEXT",
   },
-  Queue: {
-    key: "TEXT PRIMARY KEY",
-    value: "TEXT",
+  DownloadQueue: {
+    epid: "TEXT PRIMARY KEY",
+    Type: "TEXT",
+    Title: "TEXT",
+    EpNum: "TEXT",
+    SubDub: "TEXT",
+    malid: "TEXT",
+    id: "TEXT",
+    ChapterTitle: "TEXT",
+    status: "TEXT",
+    totalSegments: "INTEGER",
+    currentSegments: "INTEGER",
+    caption: "TEXT",
+    added_at: "INTEGER",
+    config: "TEXT",
   },
   cookie: {
     id: "TEXT PRIMARY KEY",
@@ -121,13 +136,7 @@ const tables = {
     referer: "TEXT",
     updatedAt: "INTEGER",
   },
-  next_episodes: {
-    livechart_id: "TEXT",
-    episode: "INTEGER",
-    date: "INTEGER",
-    title: "TEXT",
-    image: "TEXT",
-  },
+
   unlinked_mal_ids: {
     id: "TEXT PRIMARY KEY",
     malid: "TEXT",
@@ -220,33 +229,13 @@ try {
 }
 
 try {
-  const tableCheck = global.db
-    .prepare(
-      "SELECT name FROM sqlite_master WHERE type='table' AND name='next_episodes'",
-    )
-    .get();
-  if (tableCheck) {
-    const columns = global.db
-      .prepare("PRAGMA table_info(next_episodes)")
-      .all()
-      .map((c) => c.name);
-    if (!columns.includes("title")) {
-      global.db.exec("DROP TABLE IF EXISTS next_episodes");
-      try {
-        global.db
-          .prepare(
-            "DELETE FROM Settings WHERE key = 'last_livechart_schedule_run'",
-          )
-          .run();
-      } catch (_) {}
-      logger.info(
-        "[db] Dropped next_episodes table and cleared last schedule run timestamp to trigger schema migration and schedule refresh.",
-      );
-    }
-  }
+  global.db.exec("DROP TABLE IF EXISTS next_episodes");
+  global.db.exec(
+    "DELETE FROM Settings WHERE key = 'last_livechart_schedule_run'",
+  );
 } catch (e) {
   logger.error(
-    "[db] Failed during next_episodes schema migration check: " + e.message,
+    "[db] Failed to drop next_episodes table from global.db: " + e.message,
   );
 }
 
@@ -266,39 +255,65 @@ Object.entries(tables).forEach(([tableName, columns]) => {
   }
 });
 
-// Create unique index for next_episodes
+// Migrate legacy "config" JSON settings row to individual rows if it exists
 try {
-  global.db.exec(
-    "CREATE UNIQUE INDEX IF NOT EXISTS idx_next_episodes_id_ep ON next_episodes (livechart_id, episode)",
-  );
-} catch (e) {
-  logger.error("Failed to create unique index on next_episodes: " + e.message);
+  const rawConfigRow = global.db
+    .prepare("SELECT value FROM Settings WHERE key = ?")
+    .get("config");
+  if (rawConfigRow && rawConfigRow.value) {
+    const parsed = JSON.parse(rawConfigRow.value);
+    if (parsed && typeof parsed === "object") {
+      const booleanKeys = new Set([
+        "developerMode",
+        "autoLoadNextChapter",
+        "enableDiscordRPC",
+        "mergeSubtitles",
+        "malDiscordProfile",
+        "autoSkipIntro",
+        "Pagination",
+      ]);
+      const insertStmt = global.db.prepare(
+        "INSERT INTO Settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+      );
+      for (const [k, v] of Object.entries(parsed)) {
+        let val = v;
+        if (booleanKeys.has(k)) {
+          if (v === "on") val = true;
+          else if (v === "off") val = false;
+        }
+        insertStmt.run(k, JSON.stringify(val));
+      }
+      global.db.prepare("DELETE FROM Settings WHERE key = ?").run("config");
+      logger.info(
+        "[db] Successfully migrated legacy config JSON row to individual database rows",
+      );
+    }
+  }
+} catch (migErr) {
+  logger.error("[db] Error migrating legacy settings: " + migErr.message);
 }
 
-// Migrate old Settings unlinked_mal_ids to dedicated table
+// Create unique index for SkipTimes
 try {
-  const row = global.db
-    .prepare("SELECT value FROM Settings WHERE key = 'unlinked_mal_ids'")
-    .get();
-  if (row && row.value) {
-    const map = JSON.parse(row.value);
-    const insertStmt = global.db.prepare(
-      "INSERT OR IGNORE INTO unlinked_mal_ids (id, malid) VALUES (?, NULL)",
-    );
-    Object.keys(map).forEach((id) => {
-      if (map[id]) {
-        insertStmt.run(id);
-      }
-    });
-    global.db
-      .prepare("DELETE FROM Settings WHERE key = 'unlinked_mal_ids'")
-      .run();
-    logger.info(
-      "Migrated Settings unlinked_mal_ids to dedicated database table.",
-    );
+  global.db.exec(
+    "CREATE UNIQUE INDEX IF NOT EXISTS idx_skiptimes_anime_ep ON SkipTimes (anime_id, episode_number)",
+  );
+} catch (e) {
+  logger.error("Failed to create unique index on SkipTimes: " + e.message);
+}
+
+// Drop unused EpisodesDataId column from Anime table
+try {
+  const animeColumns = global.db
+    .prepare("PRAGMA table_info(Anime)")
+    .all()
+    .map((col) => col.name);
+  if (animeColumns.includes("EpisodesDataId")) {
+    global.db.exec("ALTER TABLE Anime DROP COLUMN EpisodesDataId");
+    logger.info("[db] Dropped unused EpisodesDataId column from Anime table");
   }
 } catch (e) {
-  logger.error("Failed to migrate unlinked_mal_ids to table: " + e.message);
+  logger.error("[db] Failed to drop EpisodesDataId column: " + e.message);
 }
 
 function updateTableSchema(tableName, expectedColumns) {

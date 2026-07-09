@@ -14,7 +14,7 @@ const { providerFetch } = require("./settings");
 
 let AnimeQueue = [];
 let isProcessorRunning = false;
-let isQueuePausedState = getKeyValue("Queue", "isPaused") || false;
+let isQueuePausedState = getKeyValue("Settings", "isQueuePaused") || false;
 
 function isQueuePaused() {
   return isQueuePausedState;
@@ -26,13 +26,13 @@ global.isEpisodeInQueue = (epid) =>
 
 async function pauseQueue() {
   isQueuePausedState = true;
-  setKeyValue("Queue", "isPaused", true);
+  setKeyValue("Settings", "isQueuePaused", true);
   return isQueuePausedState;
 }
 
 async function resumeQueue() {
   isQueuePausedState = false;
-  setKeyValue("Queue", "isPaused", false);
+  setKeyValue("Settings", "isQueuePaused", false);
   try {
     continuousExecution();
   } catch (err) {}
@@ -41,8 +41,34 @@ async function resumeQueue() {
 
 // Add to Queue
 async function addToQueue(item) {
+  try {
+    global.db
+      .prepare(
+        `INSERT OR REPLACE INTO DownloadQueue (epid, Type, Title, EpNum, SubDub, malid, id, ChapterTitle, status, totalSegments, currentSegments, caption, added_at, config) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .run(
+        item.epid,
+        item.Type,
+        item.Title,
+        item.EpNum || "",
+        item.SubDub || "",
+        item.malid || "",
+        item.id || "",
+        item.ChapterTitle || "",
+        item.status || "Pending",
+        item.totalSegments || 0,
+        item.currentSegments || 0,
+        item.caption || "",
+        item.added_at || Date.now(),
+        JSON.stringify(item.config || {}),
+      );
+  } catch (err) {
+    logger.error("Failed to insert item to DownloadQueue DB: " + err.message);
+  }
   AnimeQueue.push(item);
-  await saveQueue();
+  if (global.updatePowerSaveBlocker) {
+    global.updatePowerSaveBlocker();
+  }
   if (!isQueuePausedState) {
     try {
       setTimeout(() => {
@@ -54,12 +80,26 @@ async function addToQueue(item) {
 
 // load queue when the script start
 async function loadQueue() {
-  AnimeQueue = getKeyValue("Queue", "queue") || [];
-  isQueuePausedState = getKeyValue("Queue", "isPaused") || false;
-  AnimeQueue.forEach((entry) => {
-    entry.progress = 0;
-  });
-  await saveQueue();
+  try {
+    const rows = global.db
+      .prepare("SELECT * FROM DownloadQueue ORDER BY added_at ASC")
+      .all();
+    AnimeQueue = rows.map((item) => {
+      if (item.config) {
+        try {
+          item.config = JSON.parse(item.config);
+        } catch (e) {
+          item.config = {};
+        }
+      }
+      item.progress = 0;
+      return item;
+    });
+  } catch (err) {
+    AnimeQueue = [];
+    logger.error("Failed to load DownloadQueue DB: " + err.message);
+  }
+  isQueuePausedState = getKeyValue("Settings", "isQueuePaused") || false;
   if (!isQueuePausedState) {
     try {
       continuousExecution();
@@ -69,10 +109,19 @@ async function loadQueue() {
 
 // remove anime from queue
 async function removeQueue(AnimeEpId) {
+  try {
+    global.db
+      .prepare("DELETE FROM DownloadQueue WHERE epid = ?")
+      .run(AnimeEpId);
+  } catch (err) {
+    logger.error("Failed to delete from DownloadQueue DB: " + err.message);
+  }
   const indexToRemove = AnimeQueue.findIndex((item) => item.epid === AnimeEpId);
   if (indexToRemove !== -1) {
     AnimeQueue.splice(indexToRemove, 1);
-    await saveQueue();
+  }
+  if (global.updatePowerSaveBlocker) {
+    global.updatePowerSaveBlocker();
   }
   return AnimeQueue;
 }
@@ -80,17 +129,57 @@ async function removeQueue(AnimeEpId) {
 // Remove multiple items from queue at once and save to SQLite
 async function removeMultipleFromQueue(epids = []) {
   if (epids.length > 0) {
+    try {
+      const placeholders = epids.map(() => "?").join(",");
+      global.db
+        .prepare(`DELETE FROM DownloadQueue WHERE epid IN (${placeholders})`)
+        .run(...epids);
+    } catch (err) {
+      logger.error(
+        "Failed to delete multiple from DownloadQueue DB: " + err.message,
+      );
+    }
     const epidsSet = new Set(epids);
     AnimeQueue = AnimeQueue.filter((item) => !epidsSet.has(item.epid));
-    await saveQueue();
+    if (global.updatePowerSaveBlocker) {
+      global.updatePowerSaveBlocker();
+    }
   }
   return AnimeQueue;
 }
 
-// Remove With Index
+// Save Queue Data
 async function SaveQueueData(QueueData) {
   AnimeQueue = QueueData;
-  await saveQueue();
+  try {
+    global.db.prepare("DELETE FROM DownloadQueue").run();
+    const insertStmt = global.db.prepare(
+      `INSERT OR REPLACE INTO DownloadQueue (epid, Type, Title, EpNum, SubDub, malid, id, ChapterTitle, status, totalSegments, currentSegments, caption, added_at, config) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    );
+    for (const item of QueueData) {
+      insertStmt.run(
+        item.epid,
+        item.Type,
+        item.Title,
+        item.EpNum || "",
+        item.SubDub || "",
+        item.malid || "",
+        item.id || "",
+        item.ChapterTitle || "",
+        item.status || "Pending",
+        item.totalSegments || 0,
+        item.currentSegments || 0,
+        item.caption || "",
+        item.added_at || Date.now(),
+        JSON.stringify(item.config || {}),
+      );
+    }
+  } catch (err) {
+    logger.error("Failed to SaveQueueData to DownloadQueue DB: " + err.message);
+  }
+  if (global.updatePowerSaveBlocker) {
+    global.updatePowerSaveBlocker();
+  }
 }
 
 // update the queue [ for storing how much downloaded ]
@@ -138,12 +227,31 @@ async function updateQueue(
           epid: completedItem.epid,
         });
       }
+      try {
+        global.db.prepare("DELETE FROM DownloadQueue WHERE epid = ?").run(epid);
+      } catch (err) {
+        logger.error(
+          "Failed to delete completed item from DownloadQueue DB: " +
+            err.message,
+        );
+      }
       AnimeQueue.splice(indexToUpdate, 1);
-      Tosave = true;
+      if (global.updatePowerSaveBlocker) {
+        global.updatePowerSaveBlocker();
+      }
+      Tosave = false;
     }
 
     if (Tosave) {
-      await saveQueue();
+      try {
+        global.db
+          .prepare(
+            "UPDATE DownloadQueue SET totalSegments = ?, currentSegments = ?, caption = ? WHERE epid = ?",
+          )
+          .run(totalSegments, currentSegments, caption || "", epid);
+      } catch (err) {
+        logger.error("Failed to update DownloadQueue DB: " + err.message);
+      }
     }
   }
   return AnimeQueue;
@@ -156,20 +264,6 @@ async function getQueue(currently_downloading = null) {
     : AnimeQueue;
 }
 
-// sync the queue with database
-async function saveQueue() {
-  try {
-    setKeyValue("Queue", "queue", AnimeQueue);
-    if (global.updatePowerSaveBlocker) {
-      global.updatePowerSaveBlocker();
-    }
-  } catch (err) {
-    logger.error("Failed To Save Queue");
-    logger.error(`Error message: ${err.message}`);
-    logger.error(`Stack trace: ${err.stack}`);
-  }
-}
-
 // check if it exists in queue
 async function checkEpisodeDownload(epid) {
   const found = AnimeQueue.some((item) => item.epid === epid);
@@ -179,8 +273,37 @@ async function checkEpisodeDownload(epid) {
 // Add multiple items to queue at once and save to SQLite
 async function addMultipleToQueue(items) {
   if (items && items.length > 0) {
+    try {
+      const insertStmt = global.db.prepare(
+        `INSERT OR REPLACE INTO DownloadQueue (epid, Type, Title, EpNum, SubDub, malid, id, ChapterTitle, status, totalSegments, currentSegments, caption, added_at, config) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      );
+      for (const item of items) {
+        insertStmt.run(
+          item.epid,
+          item.Type,
+          item.Title,
+          item.EpNum || "",
+          item.SubDub || "",
+          item.malid || "",
+          item.id || "",
+          item.ChapterTitle || "",
+          item.status || "Pending",
+          item.totalSegments || 0,
+          item.currentSegments || 0,
+          item.caption || "",
+          item.added_at || Date.now(),
+          JSON.stringify(item.config || {}),
+        );
+      }
+    } catch (err) {
+      logger.error(
+        "Failed to addMultipleToQueue in DownloadQueue DB: " + err.message,
+      );
+    }
     AnimeQueue.push(...items);
-    await saveQueue();
+    if (global.updatePowerSaveBlocker) {
+      global.updatePowerSaveBlocker();
+    }
     if (!isQueuePausedState) {
       try {
         continuousExecution();
@@ -276,7 +399,7 @@ async function continuousExecution() {
           await SaveQueueData(AnimeQueue);
           continue;
         }
-        await saveQueue();
+        await removeQueue(currentTask.epid);
         await new Promise((resolve) => setTimeout(resolve, 2000));
       } catch (err) {
         if (err.message && err.message.includes("Queue Paused")) {
@@ -419,7 +542,7 @@ async function downloadEpisodeByQuality(
         subdub === "hsub" ? [] : (sourcesArray?.subtitles ?? []),
         subdub === "hsub"
           ? false
-          : config?.mergeSubtitles === "on"
+          : config?.mergeSubtitles === true
             ? true
             : false,
         (config?.subtitleFormat ?? "vtt") === "srt",
@@ -427,6 +550,9 @@ async function downloadEpisodeByQuality(
       );
 
       if (malid && animeId) {
+        try {
+          await updateHistory("Anime", animeId, malid, episodeNumber);
+        } catch (_) {}
         try {
           const epNum = parseFloat(episodeNumber);
           if (!isNaN(epNum)) {
@@ -444,28 +570,20 @@ async function downloadEpisodeByQuality(
                   },
                 }));
 
-                let skipTimesData = {};
                 try {
-                  const row = global.db
-                    .prepare("SELECT skip_times FROM Anime WHERE id = ?")
-                    .get(animeId);
-                  if (row && row.skip_times) {
-                    skipTimesData = JSON.parse(row.skip_times);
-                  }
-                } catch (e) {
-                  skipTimesData = {};
+                  global.db
+                    .prepare(
+                      "INSERT OR REPLACE INTO SkipTimes (anime_id, episode_number, skip_times) VALUES (?, ?, ?)",
+                    )
+                    .run(animeId, Number(epNum), JSON.stringify(normalized));
+                  logger.info(
+                    `[queueWorker] Saved skip times to SkipTimes DB for ${Title} EP ${epNum}`,
+                  );
+                } catch (errDb) {
+                  logger.error(
+                    `[queueWorker] Failed to save skip times to SkipTimes DB: ${errDb.message}`,
+                  );
                 }
-
-                skipTimesData[String(epNum)] = normalized;
-
-                global.db
-                  .prepare(
-                    `UPDATE Anime SET skip_times = ?, last_updated = CURRENT_TIMESTAMP WHERE id = ?`,
-                  )
-                  .run(JSON.stringify(skipTimesData), animeId);
-                logger.info(
-                  `[queueWorker] Saved skip times to Anime metadata DB for ${Title} EP ${epNum}`,
-                );
               }
             }
           }
@@ -559,7 +677,7 @@ module.exports = {
   loadQueue,
   removeQueue,
   removeMultipleFromQueue,
-  saveQueue,
+
   updateQueue,
   getQueue,
   checkEpisodeDownload,

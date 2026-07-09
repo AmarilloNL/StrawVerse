@@ -13,6 +13,7 @@ import { swalSuccess, swalError, swalConfirm } from "../../utils/swal";
 import { apiPost } from "../../utils/common";
 import watchTogetherClient from "../../utils/watchTogetherClient";
 import SettingsRow from "./SettingsRow";
+import Dropdown from "../common/Dropdown";
 import "../css/SettingsView.css";
 
 export default function SettingsView({
@@ -29,25 +30,33 @@ export default function SettingsView({
 
   // Form states
   const [downloadLocation, setDownloadLocation] = useState("");
-  const [discordRpc, setDiscordRpc] = useState("off");
+  const [discordRpc, setDiscordRpc] = useState(false);
   const [animeProvider, setAnimeProvider] = useState("");
   const [quality, setQuality] = useState("1080p");
   const [mangaProvider, setMangaProvider] = useState("weebcentral");
-  const [autoLoadNextChapter, setAutoLoadNextChapter] = useState("on");
-  const [pagination, setPagination] = useState("off");
+  const [autoLoadNextChapter, setAutoLoadNextChapter] = useState(true);
+  const [pagination, setPagination] = useState(false);
   const [malStatus, setMalStatus] = useState("plan_to_watch");
-  const [mergeSubtitles, setMergeSubtitles] = useState("off");
+  const [mergeSubtitles, setMergeSubtitles] = useState(false);
   const [subtitleFormat, setSubtitleFormat] = useState("vtt");
-  const [malDiscordProfile, setMalDiscordProfile] = useState("off");
+  const [malDiscordProfile, setMalDiscordProfile] = useState(false);
   const [malUsername, setMalUsername] = useState(null);
   const [imageCacheSizeLimit, setImageCacheSizeLimit] = useState(5);
-  const [developerMode, setDeveloperMode] = useState("off");
-  const [autoSkipIntro, setAutoSkipIntro] = useState("on");
+  const [developerMode, setDeveloperMode] = useState(false);
+  const [autoSkipIntro, setAutoSkipIntro] = useState(true);
   const [mangaReaderLayout, setMangaReaderLayout] = useState("long-strip");
   const [mangaReaderWidth, setMangaReaderWidth] = useState(800);
   const [cacheStats, setCacheStats] = useState(null);
   const [clearingCache, setClearingCache] = useState(false);
-
+  const getProviderIcon = (name, type) => {
+    if (!name || !settings?.installedExtensions) return null;
+    const list =
+      type === "Anime"
+        ? settings.installedExtensions.Anime
+        : settings.installedExtensions.Manga;
+    const ext = list?.find((e) => e.name === name);
+    return ext?.icon || null;
+  };
   const cleanUrlForDisplay = (url) => {
     let cleaned = (url || "").trim();
     cleaned = cleaned.replace(/^(wss:\/\/|ws:\/\/|https:\/\/|http:\/\/)/i, "");
@@ -228,42 +237,37 @@ export default function SettingsView({
   const fetchSettings = async () => {
     setLoading(true);
     try {
-      const response = await fetch("/api/settings");
-      const data = await response.json();
-      setSettings(data.settings);
-      setUrl(data.url);
-      setMalLoggedIn(data.MalLoggedIn);
+      if (window.sharedStateAPI && window.sharedStateAPI.getSettings) {
+        const data = await window.sharedStateAPI.getSettings();
+        setSettings(data.settings);
+        setUrl(data.url);
+        setMalLoggedIn(data.MalLoggedIn);
 
-      // Load values into form states
-      const s = data.settings;
-      setDownloadLocation(s.CustomDownloadLocation || "");
-      setDiscordRpc(s.enableDiscordRPC || "off");
-      setAnimeProvider(s.Animeprovider || "");
-      setQuality(s.quality || "1080p");
-      setMangaProvider(s.Mangaprovider || "weebcentral");
-      setAutoLoadNextChapter(s.autoLoadNextChapter || "on");
-      setPagination(s.Pagination || "off");
-      setMalStatus(s.status || "plan_to_watch");
-      setMergeSubtitles(s.mergeSubtitles || "off");
-      setSubtitleFormat(s.subtitleFormat || "vtt");
-      setMalDiscordProfile(s.malDiscordProfile || "off");
-      setMalUsername(data.malUsername || null);
-      setImageCacheSizeLimit(s.imageCacheSizeLimit || 5);
-      setDeveloperMode(s.developerMode || "off");
-      const skipVal = s.autoSkipIntro || "on";
-      setAutoSkipIntro(skipVal);
-      localStorage.setItem(
-        "player-auto-skip",
-        skipVal === "on" ? "true" : "false",
-      );
+        // Load values into form states
+        const s = data.settings;
+        setDownloadLocation(s.CustomDownloadLocation || "");
+        setDiscordRpc(s.enableDiscordRPC);
+        setAnimeProvider(s.Animeprovider || "");
+        setQuality(s.quality || "1080p");
+        setMangaProvider(s.Mangaprovider || "weebcentral");
+        setAutoLoadNextChapter(s.autoLoadNextChapter);
+        setPagination(s.Pagination);
+        setMalStatus(s.status || "plan_to_watch");
+        setMergeSubtitles(s.mergeSubtitles);
+        setSubtitleFormat(s.subtitleFormat || "vtt");
+        setMalDiscordProfile(s.malDiscordProfile);
+        setMalUsername(data.malUsername || null);
+        setImageCacheSizeLimit(s.imageCacheSizeLimit || 5);
+        setDeveloperMode(s.developerMode);
+        setAutoSkipIntro(s.autoSkipIntro);
+        const layoutVal = s.mangaReaderLayout || "long-strip";
+        setMangaReaderLayout(layoutVal);
+        localStorage.setItem("manga_reader_layout", layoutVal);
 
-      const layoutVal = s.mangaReaderLayout || "long-strip";
-      setMangaReaderLayout(layoutVal);
-      localStorage.setItem("manga_reader_layout", layoutVal);
-
-      const widthVal = parseInt(s.mangaReaderWidth, 10) || 800;
-      setMangaReaderWidth(widthVal);
-      localStorage.setItem("manga_reader_width", widthVal);
+        const widthVal = parseInt(s.mangaReaderWidth, 10) || 800;
+        setMangaReaderWidth(widthVal);
+        localStorage.setItem("manga_reader_width", widthVal);
+      }
 
       setHasChanges(false);
     } catch (err) {
@@ -348,76 +352,75 @@ export default function SettingsView({
 
   const autoSaveSettings = async () => {
     const finalLimit = parseInt(imageCacheSizeLimit, 10);
-    if (isNaN(finalLimit) || finalLimit < 5) return; // Don't auto-save invalid limits
+    const isValidLimit = !isNaN(finalLimit) && finalLimit >= 5;
+
+    const dirty = {};
+    if (downloadLocation !== (settings.CustomDownloadLocation || ""))
+      dirty.CustomDownloadLocation = downloadLocation;
+    if (discordRpc !== settings.enableDiscordRPC)
+      dirty.enableDiscordRPC = discordRpc;
+    if (animeProvider !== (settings.Animeprovider || ""))
+      dirty.Animeprovider = animeProvider;
+    if (quality !== (settings.quality || "1080p")) dirty.quality = quality;
+    if (mangaProvider !== (settings.Mangaprovider || "weebcentral"))
+      dirty.Mangaprovider = mangaProvider;
+    if (autoLoadNextChapter !== settings.autoLoadNextChapter)
+      dirty.autoLoadNextChapter = autoLoadNextChapter;
+    if (pagination !== settings.Pagination) dirty.Pagination = pagination;
+    if (malStatus !== (settings.status || "plan_to_watch"))
+      dirty.status = malStatus;
+    if (mergeSubtitles !== settings.mergeSubtitles)
+      dirty.mergeSubtitles = mergeSubtitles;
+    if (subtitleFormat !== (settings.subtitleFormat || "vtt"))
+      dirty.subtitleFormat = subtitleFormat;
+    if (malDiscordProfile !== settings.malDiscordProfile)
+      dirty.malDiscordProfile = malDiscordProfile;
+    if (developerMode !== settings.developerMode)
+      dirty.developerMode = developerMode;
+    if (autoSkipIntro !== settings.autoSkipIntro)
+      dirty.autoSkipIntro = autoSkipIntro;
+    if (mangaReaderLayout !== (settings.mangaReaderLayout || "long-strip"))
+      dirty.mangaReaderLayout = mangaReaderLayout;
+    if (mangaReaderWidth !== (parseInt(settings.mangaReaderWidth, 10) || 800))
+      dirty.mangaReaderWidth = mangaReaderWidth;
+    if (isValidLimit && finalLimit !== (settings.imageCacheSizeLimit || 5))
+      dirty.imageCacheSizeLimit = finalLimit;
+
+    if (Object.keys(dirty).length === 0) return;
 
     setSaving(true);
     try {
-      const response = await fetch("/api/settings", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          quality: quality,
-          Animeprovider: animeProvider,
-          Mangaprovider: mangaProvider,
-          CustomDownloadLocation: downloadLocation,
-          Pagination: pagination,
-          autoLoadNextChapter: autoLoadNextChapter,
-          status: malStatus,
-          enableDiscordRPC: discordRpc,
-          mergeSubtitles: mergeSubtitles,
-          subtitleFormat: subtitleFormat,
-          malDiscordProfile: malDiscordProfile,
-          imageCacheSizeLimit: finalLimit,
-          developerMode: developerMode,
-          autoSkipIntro: autoSkipIntro,
-          mangaReaderLayout: mangaReaderLayout,
-          mangaReaderWidth: mangaReaderWidth,
-        }),
-      });
-      const data = await response.json();
-      if (data.message) {
+      if (window.sharedStateAPI) {
+        const dirtyKeys = Object.keys(dirty);
+        if (dirtyKeys.length === 1) {
+          const key = dirtyKeys[0];
+          await window.sharedStateAPI.updateSetting(key, dirty[key]);
+        } else {
+          await window.sharedStateAPI.updateSettings(dirty);
+        }
+
         // Silently update comparison base to reset hasChanges state
         setSettings({
           ...settings,
-          quality: quality,
-          Animeprovider: animeProvider,
-          Mangaprovider: mangaProvider,
-          CustomDownloadLocation: downloadLocation,
-          Pagination: pagination,
-          autoLoadNextChapter: autoLoadNextChapter,
-          status: malStatus,
-          enableDiscordRPC: discordRpc,
-          mergeSubtitles: mergeSubtitles,
-          subtitleFormat: subtitleFormat,
-          malDiscordProfile: malDiscordProfile,
-          imageCacheSizeLimit: finalLimit,
-          developerMode: developerMode,
-          autoSkipIntro: autoSkipIntro,
-          mangaReaderLayout: mangaReaderLayout,
-          mangaReaderWidth: mangaReaderWidth,
+          ...dirty,
         });
-        localStorage.setItem(
-          "player-auto-skip",
-          autoSkipIntro === "on" ? "true" : "false",
-        );
         localStorage.setItem("manga_reader_layout", mangaReaderLayout);
         localStorage.setItem("manga_reader_width", mangaReaderWidth);
         if (onSettingsSaved) onSettingsSaved();
-      } else if (data.error) {
-        Swal.fire({
-          title: "Error Saving Settings",
-          text: data.error,
-          icon: "error",
-          toast: true,
-          position: "top-end",
-          showConfirmButton: false,
-          timer: 3000,
-          background: "var(--bg-secondary)",
-          color: "var(--text-main)",
-        });
       }
     } catch (err) {
       console.error("Failed to auto-save settings:", err);
+      Swal.fire({
+        title: "Error Saving Settings",
+        text: err.message,
+        icon: "error",
+        toast: true,
+        position: "top-end",
+        showConfirmButton: false,
+        timer: 3000,
+        background: "var(--bg-secondary)",
+        color: "var(--text-main)",
+      });
     } finally {
       setSaving(false);
     }
@@ -431,18 +434,18 @@ export default function SettingsView({
 
     const changed =
       downloadLocation !== (settings.CustomDownloadLocation || "") ||
-      discordRpc !== (settings.enableDiscordRPC || "off") ||
+      discordRpc !== settings.enableDiscordRPC ||
       animeProvider !== (settings.Animeprovider || "") ||
       quality !== (settings.quality || "1080p") ||
       mangaProvider !== (settings.Mangaprovider || "weebcentral") ||
-      autoLoadNextChapter !== (settings.autoLoadNextChapter || "on") ||
-      pagination !== (settings.Pagination || "off") ||
+      autoLoadNextChapter !== settings.autoLoadNextChapter ||
+      pagination !== settings.Pagination ||
       malStatus !== (settings.status || "plan_to_watch") ||
-      mergeSubtitles !== (settings.mergeSubtitles || "off") ||
+      mergeSubtitles !== settings.mergeSubtitles ||
       subtitleFormat !== (settings.subtitleFormat || "vtt") ||
-      malDiscordProfile !== (settings.malDiscordProfile || "off") ||
-      developerMode !== (settings.developerMode || "off") ||
-      autoSkipIntro !== (settings.autoSkipIntro || "on") ||
+      malDiscordProfile !== settings.malDiscordProfile ||
+      developerMode !== settings.developerMode ||
+      autoSkipIntro !== settings.autoSkipIntro ||
       mangaReaderLayout !== (settings.mangaReaderLayout || "long-strip") ||
       mangaReaderWidth !== (parseInt(settings.mangaReaderWidth, 10) || 800) ||
       (isValidLimit && finalLimit !== (settings.imageCacheSizeLimit || 5));
@@ -479,7 +482,7 @@ export default function SettingsView({
     const confirmResult = await swalConfirm(
       "Are you sure?",
       "Are you sure you want to logout from MyAnimeList?",
-      "Yes, logout"
+      "Yes, logout",
     );
     if (!confirmResult.isConfirmed) return;
     try {
@@ -497,7 +500,7 @@ export default function SettingsView({
     const confirmResult = await swalConfirm(
       "Clear Image Cache?",
       "This will delete all cached cover and metadata images. They will be re-downloaded when needed.",
-      "Yes, clear cache"
+      "Yes, clear cache",
     );
     if (!confirmResult.isConfirmed) return;
     setClearingCache(true);
@@ -593,7 +596,6 @@ export default function SettingsView({
               {/* General Settings */}
               <div className="settings-section glass-panel">
                 <h2 className="settings-section-title">General Settings</h2>
-
                 <div className="settings-row-item">
                   <div className="settings-row-info">
                     <div className="settings-row-label">Download Location</div>
@@ -611,8 +613,7 @@ export default function SettingsView({
                       placeholder="Downloads directory path"
                     />
                   </div>
-                </div>
-
+                </div>{" "}
                 <div className="settings-row-item">
                   <div className="settings-row-info">
                     <div className="settings-row-label">
@@ -624,43 +625,44 @@ export default function SettingsView({
                     </div>
                   </div>
                   <div className="settings-row-control">
-                    <select
-                      value={discordRpc}
-                      onChange={(e) => setDiscordRpc(e.target.value)}
-                      className="settings-select"
-                    >
-                      <option value="on">Enabled</option>
-                      <option value="off">Disabled</option>
-                    </select>
+                    <Dropdown
+                      value={String(discordRpc)}
+                      onChange={(val) => setDiscordRpc(val === "true")}
+                      options={[
+                        { value: "true", label: "Enabled" },
+                        { value: "false", label: "Disabled" },
+                      ]}
+                      minWidth={200}
+                    />
                   </div>
                 </div>
-
                 <SettingsRow
                   label="Developer Mode"
                   desc="Enable advanced logs viewer tab and debug utilities."
                 >
-                  <select
-                    value={developerMode}
-                    onChange={(e) => setDeveloperMode(e.target.value)}
-                    className="settings-select"
-                  >
-                    <option value="on">Enabled</option>
-                    <option value="off">Disabled</option>
-                  </select>
+                  <Dropdown
+                    value={String(developerMode)}
+                    onChange={(val) => setDeveloperMode(val === "true")}
+                    options={[
+                      { value: "true", label: "Enabled" },
+                      { value: "false", label: "Disabled" },
+                    ]}
+                    minWidth={200}
+                  />
                 </SettingsRow>
-
                 <SettingsRow
                   label="Pagination Controls"
                   desc="Toggle between numbered pages or infinite scroll loading."
                 >
-                  <select
-                    value={pagination}
-                    onChange={(e) => setPagination(e.target.value)}
-                    className="settings-select"
-                  >
-                    <option value="on">Enabled (Page Buttons)</option>
-                    <option value="off">Disabled (Infinite Scroll)</option>
-                  </select>
+                  <Dropdown
+                    value={String(pagination)}
+                    onChange={(val) => setPagination(val === "true")}
+                    options={[
+                      { value: "true", label: "Enabled (Page Buttons)" },
+                      { value: "false", label: "Disabled (Infinite Scroll)" },
+                    ]}
+                    minWidth={200}
+                  />
                 </SettingsRow>
               </div>
 
@@ -819,18 +821,19 @@ export default function SettingsView({
                     </div>
                   </div>
                   <div className="settings-row-control">
-                    <select
-                      value={animeProvider}
-                      onChange={(e) => setAnimeProvider(e.target.value)}
-                      className="settings-select"
-                    >
-                      <option value="">None selected</option>
-                      {settings?.providers?.Anime?.map((name) => (
-                        <option key={name} value={name}>
-                          {name}
-                        </option>
-                      ))}
-                    </select>
+                    <Dropdown
+                      value={animeProvider || ""}
+                      onChange={setAnimeProvider}
+                      options={[
+                        { value: "", label: "None selected" },
+                        ...(settings?.providers?.Anime || []).map((name) => ({
+                          value: name,
+                          label: name,
+                          icon: getProviderIcon(name, "Anime"),
+                        })),
+                      ]}
+                      minWidth={200}
+                    />
                   </div>
                 </div>
 
@@ -842,15 +845,16 @@ export default function SettingsView({
                     </div>
                   </div>
                   <div className="settings-row-control">
-                    <select
+                    <Dropdown
                       value={quality}
-                      onChange={(e) => setQuality(e.target.value)}
-                      className="settings-select"
-                    >
-                      <option value="1080p">1080p (Full HD)</option>
-                      <option value="720p">720p (HD)</option>
-                      <option value="360p">360p (SD)</option>
-                    </select>
+                      onChange={setQuality}
+                      options={[
+                        { value: "1080p", label: "1080p (Full HD)" },
+                        { value: "720p", label: "720p (HD)" },
+                        { value: "360p", label: "360p (SD)" },
+                      ]}
+                      minWidth={200}
+                    />
                   </div>
                 </div>
 
@@ -865,14 +869,15 @@ export default function SettingsView({
                     </div>
                   </div>
                   <div className="settings-row-control">
-                    <select
-                      value={autoSkipIntro}
-                      onChange={(e) => setAutoSkipIntro(e.target.value)}
-                      className="settings-select"
-                    >
-                      <option value="on">Yes</option>
-                      <option value="off">No</option>
-                    </select>
+                    <Dropdown
+                      value={String(autoSkipIntro)}
+                      onChange={(val) => setAutoSkipIntro(val === "true")}
+                      options={[
+                        { value: "true", label: "Yes" },
+                        { value: "false", label: "No" },
+                      ]}
+                      minWidth={200}
+                    />
                   </div>
                 </div>
 
@@ -887,18 +892,21 @@ export default function SettingsView({
                     </div>
                   </div>
                   <div className="settings-row-control">
-                    <select
-                      value={mergeSubtitles}
-                      onChange={(e) => setMergeSubtitles(e.target.value)}
-                      className="settings-select"
-                    >
-                      <option value="on">
-                        Yes (Merge subtitles inside MP4)
-                      </option>
-                      <option value="off">
-                        No (Download subtitles in subfolder)
-                      </option>
-                    </select>
+                    <Dropdown
+                      value={String(mergeSubtitles)}
+                      onChange={(val) => setMergeSubtitles(val === "true")}
+                      options={[
+                        {
+                          value: "true",
+                          label: "Yes (Merge subtitles inside MP4)",
+                        },
+                        {
+                          value: "false",
+                          label: "No (Download subtitles in subfolder)",
+                        },
+                      ]}
+                      minWidth={200}
+                    />
                   </div>
                 </div>
 
@@ -911,14 +919,15 @@ export default function SettingsView({
                     </div>
                   </div>
                   <div className="settings-row-control">
-                    <select
+                    <Dropdown
                       value={subtitleFormat}
-                      onChange={(e) => setSubtitleFormat(e.target.value)}
-                      className="settings-select"
-                    >
-                      <option value="srt">SubRip (.srt)</option>
-                      <option value="vtt">WebVTT (.vtt)</option>
-                    </select>
+                      onChange={setSubtitleFormat}
+                      options={[
+                        { value: "srt", label: "SubRip (.srt)" },
+                        { value: "vtt", label: "WebVTT (.vtt)" },
+                      ]}
+                      minWidth={200}
+                    />
                   </div>
                 </div>
 
@@ -955,17 +964,18 @@ export default function SettingsView({
                     </div>
                   </div>
                   <div className="settings-row-control">
-                    <select
-                      value={mangaProvider}
-                      onChange={(e) => setMangaProvider(e.target.value)}
-                      className="settings-select"
-                    >
-                      {settings?.providers?.Manga?.map((name) => (
-                        <option key={name} value={name}>
-                          {name}
-                        </option>
-                      ))}
-                    </select>
+                    <Dropdown
+                      value={mangaProvider || ""}
+                      onChange={setMangaProvider}
+                      options={(settings?.providers?.Manga || []).map(
+                        (name) => ({
+                          value: name,
+                          label: name,
+                          icon: getProviderIcon(name, "Manga"),
+                        }),
+                      )}
+                      minWidth={200}
+                    />
                   </div>
                 </div>
 
@@ -979,17 +989,19 @@ export default function SettingsView({
                     </div>
                   </div>
                   <div className="settings-row-control">
-                    <select
+                    <Dropdown
                       value={mangaReaderLayout}
-                      onChange={(e) => setMangaReaderLayout(e.target.value)}
-                      className="settings-select"
-                    >
-                      <option value="long-strip">
-                        Long Strip (Vertical Scroll)
-                      </option>
-                      <option value="single">Single Page</option>
-                      <option value="double">Double Page</option>
-                    </select>
+                      onChange={setMangaReaderLayout}
+                      options={[
+                        {
+                          value: "long-strip",
+                          label: "Long Strip (Vertical Scroll)",
+                        },
+                        { value: "single", label: "Single Page" },
+                        { value: "double", label: "Double Page" },
+                      ]}
+                      minWidth={200}
+                    />
                   </div>
                 </div>
 
@@ -1029,14 +1041,15 @@ export default function SettingsView({
                     </div>
                   </div>
                   <div className="settings-row-control">
-                    <select
-                      value={autoLoadNextChapter}
-                      onChange={(e) => setAutoLoadNextChapter(e.target.value)}
-                      className="settings-select"
-                    >
-                      <option value="on">Enabled</option>
-                      <option value="off">Disabled</option>
-                    </select>
+                    <Dropdown
+                      value={String(autoLoadNextChapter)}
+                      onChange={(val) => setAutoLoadNextChapter(val === "true")}
+                      options={[
+                        { value: "true", label: "Enabled" },
+                        { value: "false", label: "Disabled" },
+                      ]}
+                      minWidth={200}
+                    />
                   </div>
                 </div>
 
@@ -1096,21 +1109,22 @@ export default function SettingsView({
                         </div>
                       </div>
                       <div className="settings-row-control">
-                        <select
+                        <Dropdown
                           value={malStatus}
-                          onChange={(e) => setMalStatus(e.target.value)}
-                          className="settings-select"
-                        >
-                          <option value="plan_to_watch">Plan To Watch</option>
-                          <option value="watching">Watching</option>
-                          <option value="completed">Completed</option>
-                          <option value="on_hold">On Hold</option>
-                          <option value="dropped">Dropped</option>
-                        </select>
+                          onChange={setMalStatus}
+                          options={[
+                            { value: "plan_to_watch", label: "Plan To Watch" },
+                            { value: "watching", label: "Watching" },
+                            { value: "completed", label: "Completed" },
+                            { value: "on_hold", label: "On Hold" },
+                            { value: "dropped", label: "Dropped" },
+                          ]}
+                          minWidth={200}
+                        />
                       </div>
                     </div>
 
-                    {discordRpc === "on" && (
+                    {discordRpc && (
                       <div className="settings-row-item">
                         <div className="settings-row-info">
                           <div className="settings-row-label">
@@ -1124,16 +1138,17 @@ export default function SettingsView({
                           </div>
                         </div>
                         <div className="settings-row-control u-style-79">
-                          <select
-                            value={malDiscordProfile}
-                            onChange={(e) =>
-                              setMalDiscordProfile(e.target.value)
+                          <Dropdown
+                            value={String(malDiscordProfile)}
+                            onChange={(val) =>
+                              setMalDiscordProfile(val === "true")
                             }
-                            className="settings-select"
-                          >
-                            <option value="off">No</option>
-                            <option value="on">Yes</option>
-                          </select>
+                            options={[
+                              { value: "false", label: "No" },
+                              { value: "true", label: "Yes" },
+                            ]}
+                            minWidth={200}
+                          />
                           {!malUsername && (
                             <span className="settings-hint u-style-80">
                               MAL username not found — re-authenticate.

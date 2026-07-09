@@ -205,9 +205,7 @@ export default function VideoPlayer({
     typeof document !== "undefined" && document.pictureInPictureEnabled;
 
   const [skipTimes, setSkipTimes] = useState([]);
-  const [autoSkip, setAutoSkip] = useState(
-    () => localStorage.getItem("player-auto-skip") !== "false",
-  );
+  const [autoSkip, setAutoSkip] = useState(true);
 
   const [subtitles, setSubtitles] = useState([]);
   const [processedSubtitles, setProcessedSubtitles] = useState([]);
@@ -246,6 +244,24 @@ export default function VideoPlayer({
       video.muted = isMuted;
     }
   }, [volume, isMuted, selectedSource]);
+
+  useEffect(() => {
+    const fetchSettings = async () => {
+      try {
+        if (window.sharedStateAPI && window.sharedStateAPI.getSettings) {
+          const res = await window.sharedStateAPI.getSettings([
+            "autoSkipIntro",
+          ]);
+          if (res?.settings?.autoSkipIntro !== undefined) {
+            setAutoSkip(s.autoSkipIntro);
+          }
+        }
+      } catch (err) {
+        console.error("Failed to load autoSkipIntro settings:", err);
+      }
+    };
+    fetchSettings();
+  }, []);
 
   const updateTimelineDOM = () => {
     const ct = currentTimeRef.current;

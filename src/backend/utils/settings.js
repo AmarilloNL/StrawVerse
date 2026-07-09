@@ -47,7 +47,7 @@ async function settingupdate({
   mangaReaderWidth = null,
   infoSortOrder = null,
 }) {
-  const currentSettings = getKeyValue("Settings", "config");
+  const currentSettings = config;
 
   if (mal_on_off === "logout") {
     mal_on_off = false;
@@ -76,19 +76,19 @@ async function settingupdate({
   }
 
   if (autoLoadNextChapter === null) {
-    autoLoadNextChapter = currentSettings?.autoLoadNextChapter || "on";
+    autoLoadNextChapter = currentSettings?.autoLoadNextChapter ?? true;
   }
 
   if (Pagination === null) {
-    Pagination = currentSettings?.Pagination || "off";
+    Pagination = currentSettings?.Pagination ?? false;
   }
 
   if (enableDiscordRPC === null) {
-    enableDiscordRPC = currentSettings?.enableDiscordRPC || "off";
+    enableDiscordRPC = currentSettings?.enableDiscordRPC ?? false;
   }
 
   if (mergeSubtitles === null) {
-    mergeSubtitles = currentSettings?.mergeSubtitles || "off";
+    mergeSubtitles = currentSettings?.mergeSubtitles ?? false;
   }
 
   if (subtitleFormat === null) {
@@ -96,7 +96,7 @@ async function settingupdate({
   }
 
   if (malDiscordProfile === null) {
-    malDiscordProfile = currentSettings?.malDiscordProfile || "off";
+    malDiscordProfile = currentSettings?.malDiscordProfile ?? false;
   }
 
   if (CustomDownloadLocation === null) {
@@ -109,11 +109,11 @@ async function settingupdate({
   }
 
   if (developerMode === null) {
-    developerMode = currentSettings?.developerMode || "off";
+    developerMode = currentSettings?.developerMode ?? false;
   }
 
   if (autoSkipIntro === null) {
-    autoSkipIntro = currentSettings?.autoSkipIntro || "on";
+    autoSkipIntro = currentSettings?.autoSkipIntro ?? true;
   }
 
   if (mangaReaderLayout === null) {
@@ -150,7 +150,7 @@ async function settingupdate({
   config.mangaReaderWidth = mangaReaderWidth;
   config.infoSortOrder = infoSortOrder;
 
-  if (config.enableDiscordRPC === "on") {
+  if (config.enableDiscordRPC === true) {
     try {
       await StartDiscordRPC();
       logger.info("Discord RPC Activated");
@@ -229,7 +229,7 @@ async function settingfetch() {
     }
 
     if (!config?.hasOwnProperty("mergeSubtitles")) {
-      config.mergeSubtitles = "off";
+      config.mergeSubtitles = false;
       changes = true;
     }
 
@@ -239,7 +239,7 @@ async function settingfetch() {
     }
 
     if (!config?.hasOwnProperty("malDiscordProfile")) {
-      config.malDiscordProfile = "off";
+      config.malDiscordProfile = false;
       changes = true;
     }
 
@@ -249,7 +249,7 @@ async function settingfetch() {
     }
 
     if (!config?.hasOwnProperty("developerMode")) {
-      config.developerMode = "off";
+      config.developerMode = false;
       changes = true;
     }
 
@@ -268,7 +268,20 @@ async function settingfetch() {
 // load settings
 async function SettingsLoad() {
   try {
-    const storedConfig = getKeyValue("Settings", "config");
+    let storedConfig = null;
+    try {
+      const rows = global.db.prepare("SELECT key, value FROM Settings").all();
+      if (rows && rows.length > 0) {
+        storedConfig = {};
+        for (const row of rows) {
+          try {
+            storedConfig[row.key] = JSON.parse(row.value);
+          } catch {
+            storedConfig[row.key] = row.value;
+          }
+        }
+      }
+    } catch (_) {}
     config =
       storedConfig && typeof storedConfig === "object"
         ? storedConfig
@@ -280,14 +293,14 @@ async function SettingsLoad() {
             CustomDownloadLocation: getDownloadsFolder(),
             Animeprovider: null,
             Mangaprovider: "weebcentral",
-            autoLoadNextChapter: "on",
-            Pagination: "off",
-            enableDiscordRPC: "off",
-            mergeSubtitles: "off",
+            autoLoadNextChapter: true,
+            Pagination: false,
+            enableDiscordRPC: false,
+            mergeSubtitles: false,
             subtitleFormat: "vtt",
-            malDiscordProfile: "off",
+            malDiscordProfile: false,
             imageCacheSizeLimit: 5,
-            developerMode: "off",
+            developerMode: false,
             infoSortOrder: null,
           };
 
@@ -296,7 +309,7 @@ async function SettingsLoad() {
     }
 
     if (config && !config.hasOwnProperty("developerMode")) {
-      config.developerMode = "off";
+      config.developerMode = false;
     }
 
     const currentVersion = app.getVersion();
@@ -309,7 +322,7 @@ async function SettingsLoad() {
       let Tosave = await MalRefreshTokenGen(config.malToken);
       await settingupdate(Tosave);
     }
-    if (config?.enableDiscordRPC === "on") {
+    if (config?.enableDiscordRPC === true) {
       try {
         await StartDiscordRPC();
         logger.info("Discord RPC Activated");
@@ -362,7 +375,9 @@ async function providerFetch(Type = "Anime", provider) {
 // sync the config with database
 async function settingSave() {
   try {
-    setKeyValue("Settings", "config", config);
+    for (const [k, v] of Object.entries(config)) {
+      setKeyValue("Settings", k, v);
+    }
   } catch (err) {
     logger.error("Failed To Save Settings");
     logger.error(`Error message: ${err.message}`);

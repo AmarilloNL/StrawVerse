@@ -14,11 +14,10 @@ function clearMalSession() {
   MalAcount = null;
   try {
     const config = getKeyValue("Settings", "config") || {};
-    delete config.malToken;
-    delete config.malUsername;
-    delete config.malLastSync;
-    delete config.malMangaLastSync;
-    setKeyValue("Settings", "config", config);
+    setKeyValue("Settings", "malToken", null);
+    setKeyValue("Settings", "malUsername", null);
+    setKeyValue("Settings", "malLastSync", null);
+    setKeyValue("Settings", "malMangaLastSync", null);
     logger.warn("⚠️ Cleared expired or invalid MAL session.");
   } catch (_) {}
 }
@@ -26,14 +25,11 @@ function clearMalSession() {
 // Create Authorization URL
 async function MalCreateUrl() {
   try {
-    const config = getKeyValue("Settings", "config") || {};
-
-    let currentPkce = config.malPkce;
+    let currentPkce = getKeyValue("Settings", "malPkce");
     if (!currentPkce) {
       const generatedPkce = await verifyChallenge(128);
       currentPkce = generatedPkce.code_challenge;
-      config.malPkce = currentPkce;
-      setKeyValue("Settings", "config", config);
+      setKeyValue("Settings", "malPkce", currentPkce);
     }
 
     return `https://myanimelist.net/v1/oauth2/authorize?response_type=code&client_id=${MalAppID}&code_challenge_method=plain&code_challenge=${currentPkce}`;
@@ -46,8 +42,7 @@ async function MalCreateUrl() {
 // Verify OAuth Code & Exchange Token
 async function MalVerifyToken(code) {
   try {
-    const config = getKeyValue("Settings", "config") || {};
-    const storedPkce = config.malPkce;
+    const storedPkce = getKeyValue("Settings", "malPkce");
 
     if (!storedPkce) {
       throw new Error(
@@ -71,7 +66,7 @@ async function MalVerifyToken(code) {
     );
 
     // Clear used PKCE
-    delete config.malPkce;
+    setKeyValue("Settings", "malPkce", null);
 
     const now = Date.now();
     const tokenData = {
@@ -82,8 +77,7 @@ async function MalVerifyToken(code) {
 
     MalAcount = tokenData;
     let tokenStr = JSON.stringify(tokenData);
-    config.malToken = tokenStr;
-    setKeyValue("Settings", "config", config);
+    setKeyValue("Settings", "malToken", tokenStr);
 
     global.MalLoggedIn = true;
 
@@ -165,9 +159,7 @@ async function MalRefreshTokenGen(json) {
       global.MalLoggedIn = true;
 
       try {
-        const config = getKeyValue("Settings", "config") || {};
-        config.malToken = tokenStr;
-        setKeyValue("Settings", "config", config);
+        setKeyValue("Settings", "malToken", tokenStr);
       } catch (_) {}
 
       logger.info("✅ MAL Token refreshed successfully!");
@@ -207,10 +199,9 @@ async function execMalApi(apiCallFn) {
   } catch (err) {
     if (err.response?.status === 401) {
       logger.info("🔑 MAL API returned HTTP 401. Attempting token refresh...");
-      const config = getKeyValue("Settings", "config") || {};
-      if (config.malToken) {
-        // Force token refresh by passing an expired flag
-        let tokenObj = JSON.parse(config.malToken);
+      const malToken = getKeyValue("Settings", "malToken");
+      if (malToken) {
+        let tokenObj = JSON.parse(malToken);
         tokenObj.expires_at = 0;
         const refreshRes = await MalRefreshTokenGen(tokenObj);
         if (refreshRes.mal_on_off && MalAcount?.access_token) {
@@ -231,8 +222,7 @@ async function MalGetUsername(accessToken) {
     const token =
       accessToken ||
       MalAcount?.access_token ||
-      JSON.parse(getKeyValue("Settings", "config")?.malToken || "{}")
-        ?.access_token;
+      JSON.parse(getKeyValue("Settings", "malToken") || "{}")?.access_token;
     if (!token) return null;
 
     const { data } = await axios.get(
@@ -243,9 +233,7 @@ async function MalGetUsername(accessToken) {
     );
     const username = data?.name || null;
     if (username) {
-      const config = getKeyValue("Settings", "config") || {};
-      config.malUsername = username;
-      setKeyValue("Settings", "config", config);
+      setKeyValue("Settings", "malUsername", username);
       global.malUsername = username;
     }
     return username;
@@ -303,9 +291,8 @@ async function MalSyncType(type, force = false) {
     return;
   }
 
-  const config = getKeyValue("Settings", "config") || {};
   const syncKey = type === "anime" ? "malLastSync" : "malMangaLastSync";
-  let MalMappingDate = config[syncKey];
+  let MalMappingDate = getKeyValue("Settings", syncKey);
 
   let limit = MalMappingDate ? 50 : 500;
 
@@ -332,8 +319,7 @@ async function MalSyncType(type, force = false) {
               logger.info(
                 `[MAL-${type.toUpperCase()}-LIST] SKIPPED FETCH (Nothing changed on MAL)`,
               );
-              config[syncKey] = new Date().toISOString();
-              setKeyValue("Settings", "config", config);
+              setKeyValue("Settings", syncKey, new Date().toISOString());
               return;
             }
           }
@@ -364,8 +350,7 @@ async function MalSyncType(type, force = false) {
       await new Promise((resolve) => setTimeout(resolve, 2000));
     }
     logger.info(`[MAL-${type.toUpperCase()}-LIST] Successfully Saved`);
-    config[syncKey] = new Date().toISOString();
-    setKeyValue("Settings", "config", config);
+    setKeyValue("Settings", syncKey, new Date().toISOString());
   } else {
     logger.info(`[MAL-${type.toUpperCase()}-LIST] SKIPPED FETCH!`);
   }

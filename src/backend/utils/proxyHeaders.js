@@ -32,6 +32,7 @@ function saveStreamReferer(domain, referer) {
   const normalizedDomain = normalizeDomain(domain);
   const normalizedReferer = normalizeReferer(referer);
   if (!normalizedDomain || !normalizedReferer) return;
+  if (refererCache[normalizedDomain] === normalizedReferer) return;
   refererCache[normalizedDomain] = normalizedReferer;
 
   try {
@@ -41,11 +42,11 @@ function saveStreamReferer(domain, referer) {
     );
     run(
       `DELETE FROM StreamReferer
-       WHERE domain NOT IN (
-         SELECT domain FROM StreamReferer
-         ORDER BY CASE WHEN domain = ? THEN 1 ELSE 0 END DESC, updatedAt DESC
-         LIMIT ?
-       )`,
+         WHERE domain NOT IN (
+           SELECT domain FROM StreamReferer
+           ORDER BY CASE WHEN domain = ? THEN 1 ELSE 0 END DESC, updatedAt DESC
+           LIMIT ?
+         )`,
       ["__fallback__", 500],
     );
   } catch (e) {}

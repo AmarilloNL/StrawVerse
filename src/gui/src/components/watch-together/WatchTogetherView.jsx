@@ -1,9 +1,10 @@
 import { useState, useEffect, useRef, useMemo } from "react";
-import watchTogetherClient from "../utils/watchTogetherClient";
-import VideoPlayer from "./VideoPlayer";
+import watchTogetherClient from "../../utils/watchTogetherClient";
+import VideoPlayer from "../VideoPlayer";
 import Swal from "sweetalert2";
-import { swalError } from "../utils/swal";
-import "./css/WatchTogetherView.css";
+import { swalError } from "../../utils/swal";
+import Dropdown from "../common/Dropdown";
+import "../css/WatchTogetherView.css";
 import {
   Users,
   Copy,
@@ -55,6 +56,7 @@ export default function WatchTogetherView({ onNavigate }) {
   const unreadCount = isChatExpanded ? 0 : chatList.length - lastReadCount;
 
   const [providers, setProviders] = useState([]);
+  const [installedExtensions, setInstalledExtensions] = useState(null);
   const [selectedProvider, setSelectedProvider] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState([]);
@@ -96,40 +98,31 @@ export default function WatchTogetherView({ onNavigate }) {
 
   useEffect(() => {
     // 1. Fetch settings to get MAL login status
-    fetch("/api/settings")
-      .then((res) => res.json())
-      .then((settingsData) => {
-        const loggedIn = settingsData.MalLoggedIn || false;
-        setMalLoggedIn(loggedIn);
-        if (loggedIn && settingsData.malUsername) {
-          setUsername(settingsData.malUsername);
-        }
-      })
-      .catch((err) => {
-        console.error("Failed to load settings:", err);
-        setMalLoggedIn(false);
-      });
-
-    // 2. Fetch providers
-    fetch("/api/providers")
-      .then((res) => res.json())
-      .then((data) => {
-        let animeList = [];
-        if (Array.isArray(data.Anime)) {
-          animeList = data.Anime.map((p) =>
-            typeof p === "string" ? p : p.name,
+    if (window.sharedStateAPI && window.sharedStateAPI.getSettings) {
+      window.sharedStateAPI
+        .getSettings(["malUsername", "providers", "installedExtensions"])
+        .then((settingsData) => {
+          const loggedIn = settingsData.MalLoggedIn || false;
+          setMalLoggedIn(loggedIn);
+          if (loggedIn && settingsData.settings?.malUsername) {
+            setUsername(settingsData.settings.malUsername);
+          }
+          const animeList = settingsData.settings?.providers?.Anime || [];
+          setProviders(animeList);
+          setInstalledExtensions(
+            settingsData.settings?.installedExtensions || null,
           );
-        } else if (data.providers?.Anime) {
-          animeList = data.providers.Anime.map((p) =>
-            typeof p === "string" ? p : p.name,
-          );
-        }
-        setProviders(animeList);
-        if (animeList.length > 0) {
-          setSelectedProvider(animeList[0]);
-        }
-      })
-      .catch((err) => console.error("Failed to load providers:", err));
+          if (animeList.length > 0) {
+            setSelectedProvider(animeList[0]);
+          }
+        })
+        .catch((err) => {
+          console.error("Failed to load settings & providers:", err);
+          setMalLoggedIn(false);
+        });
+    } else {
+      setMalLoggedIn(false);
+    }
   }, []);
 
   useEffect(() => {
@@ -894,18 +887,22 @@ export default function WatchTogetherView({ onNavigate }) {
                   </div>
                   {hasPrivileges && (
                     <div className="wt-bottom-actions">
-                      <select
-                        className="wt-btn-provider-dropdown"
+                      <Dropdown
                         value={selectedProvider}
-                        onChange={(e) => setSelectedProvider(e.target.value)}
-                        title="Switch source"
-                      >
-                        {providers.map((p) => (
-                          <option key={p} value={p}>
-                            {p}
-                          </option>
-                        ))}
-                      </select>
+                        onChange={(val) => setSelectedProvider(val)}
+                        options={providers.map((p) => {
+                          const ext = installedExtensions?.Anime?.find(
+                            (e) => e.name === p,
+                          );
+                          return {
+                            value: p,
+                            label: p,
+                            icon: ext?.icon || null,
+                          };
+                        })}
+                        className="wt-provider-dropdown-container"
+                        triggerClassName="wt-btn-provider-dropdown"
+                      />
                       <button
                         className="wt-btn-skip"
                         onClick={handleSkipEpisode}

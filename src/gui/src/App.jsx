@@ -8,15 +8,15 @@ import DownloadsTracker from "./components/DownloadsTracker";
 import LogsView from "./components/LogsView";
 import SettingsView from "./components/settings/SettingsView";
 import Marketplace from "./components/Marketplace";
-import WatchTogetherView from "./components/WatchTogetherView";
-import WatchTogetherBar from "./components/WatchTogetherBar";
+import WatchTogetherView from "./components/watch-together/WatchTogetherView";
+import WatchTogetherBar from "./components/watch-together/WatchTogetherBar";
 
 export default function App() {
   const [history, setHistory] = useState([{ view: "home", params: {} }]);
   const [contentType, setContentType] = useState("Anime");
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [malLoggedIn, setMalLoggedIn] = useState(false);
-  const [developerMode, setDeveloperMode] = useState("off");
+  const [developerMode, setDeveloperMode] = useState(false);
   const [whatsNewData, setWhatsNewData] = useState(null);
   const [whatsNewVersion, setWhatsNewVersion] = useState("");
   const [whatsNewDate, setWhatsNewDate] = useState("");
@@ -223,11 +223,15 @@ export default function App() {
   // Sync basic configurations and MAL connections from server
   const syncSettings = async () => {
     try {
-      const settingsRes = await fetch("/api/settings");
-      const settingsData = await settingsRes.json();
-      setMalLoggedIn(settingsData.MalLoggedIn || false);
-      setDeveloperMode(settingsData.settings?.developerMode || "off");
-      setInfoSortOrder(settingsData.settings?.infoSortOrder || null);
+      if (window.sharedStateAPI && window.sharedStateAPI.getSettings) {
+        const settingsData = await window.sharedStateAPI.getSettings([
+          "developerMode",
+          "infoSortOrder",
+        ]);
+        setMalLoggedIn(settingsData.MalLoggedIn || false);
+        setDeveloperMode(settingsData.settings?.developerMode);
+        setInfoSortOrder(settingsData.settings?.infoSortOrder || null);
+      }
     } catch (err) {
       console.error("Failed to sync app info:", err);
     }
