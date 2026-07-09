@@ -17,6 +17,7 @@ import {
   Plus,
 } from "lucide-react";
 import Swal from "sweetalert2";
+import Dropdown from "./Dropdown";
 import "./css/InfoView.css";
 
 export default function InfoView({
@@ -82,7 +83,6 @@ export default function InfoView({
   const [rangeInput, setRangeInput] = useState("");
   const [lastClickedId, setLastClickedId] = useState(null);
   const [isRangeInputInvalid, setIsRangeInputInvalid] = useState(false);
-
 
   const formatTime = (seconds) => {
     if (isNaN(seconds) || seconds === null) return "";
@@ -251,10 +251,6 @@ export default function InfoView({
   const providerDropdownRef = useRef(null);
   const [isMalStatusDropdownOpen, setIsMalStatusDropdownOpen] = useState(false);
   const malStatusDropdownRef = useRef(null);
-  const [isSortDropdownOpen, setIsSortDropdownOpen] = useState(false);
-  const sortDropdownRef = useRef(null);
-  const [isDubDropdownOpen, setIsDubDropdownOpen] = useState(false);
-  const dubDropdownRef = useRef(null);
   const hasAutoPlayed = useRef(false);
 
   const fetchDetails = async (isInitial = false) => {
@@ -388,14 +384,14 @@ export default function InfoView({
     setItemsLoading(true);
     try {
       const isAnime = type === "Anime";
-      const endpoint = isAnime ? "/api/episodes" : "/api/chapters";
-      const response = await fetch(endpoint, {
+      const response = await fetch("/api/info/items", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           id: isAnime ? fetchedDetails?.dataId || id : id,
           page: page,
           provider: providerName || fetchedDetails?.provider || "local source",
+          type: type,
         }),
       });
       const data = await response.json();
@@ -555,18 +551,6 @@ export default function InfoView({
         !malStatusDropdownRef.current.contains(event.target)
       ) {
         setIsMalStatusDropdownOpen(false);
-      }
-      if (
-        sortDropdownRef.current &&
-        !sortDropdownRef.current.contains(event.target)
-      ) {
-        setIsSortDropdownOpen(false);
-      }
-      if (
-        dubDropdownRef.current &&
-        !dubDropdownRef.current.contains(event.target)
-      ) {
-        setIsDubDropdownOpen(false);
       }
     };
     document.addEventListener("mousedown", handleClickOutside);
@@ -1654,7 +1638,7 @@ export default function InfoView({
     });
     if (!confirmResult.isConfirmed) return;
     try {
-      const response = await fetch("/api/local/delete-multiple", {
+      const response = await fetch("/api/local/delete", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id, type, numbers: allDownloaded }),
@@ -1700,10 +1684,10 @@ export default function InfoView({
     });
     if (!confirmResult.isConfirmed) return;
     try {
-      const response = await fetch("/api/local/delete-episode", {
+      const response = await fetch("/api/local/delete", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id, epnum: epNum, subdub }),
+        body: JSON.stringify({ id, type, numbers: [epNum], subdub }),
       });
       const data = await response.json();
       if (!data.error) {
@@ -1747,7 +1731,7 @@ export default function InfoView({
     });
     if (!confirmResult.isConfirmed) return;
     try {
-      const response = await fetch("/api/local/delete-multiple", {
+      const response = await fetch("/api/local/delete", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id, type, numbers: [chapNum] }),
@@ -1806,7 +1790,7 @@ export default function InfoView({
     if (!confirmResult.isConfirmed) return;
 
     try {
-      const response = await fetch("/api/local/delete-multiple", {
+      const response = await fetch("/api/local/delete", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -1860,9 +1844,7 @@ export default function InfoView({
     return (
       <div className="loading-center-spinner">
         <img src="/images/loading.gif" alt="loading" className="u-style-17" />
-        <p className="u-style-18">
-          Loading details...
-        </p>
+        <p className="u-style-18">Loading details...</p>
       </div>
     );
   }
@@ -1877,7 +1859,11 @@ export default function InfoView({
           </button>
         </div>
         <div className="glass-panel u-style-30">
-          <img src="/images/image-404.png" alt="404 Not Found" className="u-style-31" />
+          <img
+            src="/images/image-404.png"
+            alt="404 Not Found"
+            className="u-style-31"
+          />
           <h2 className="u-style-32">
             {type === "Anime" ? "Anime" : "Manga"} Data Not Found
           </h2>
@@ -2008,7 +1994,10 @@ export default function InfoView({
               </button>
 
               {hasAnyDownloads && (
-                <button onClick={handleDeleteLocal} className="btn-action-base u-style-36">
+                <button
+                  onClick={handleDeleteLocal}
+                  className="btn-action-base u-style-36"
+                >
                   <Trash2 size={16} className="u-style-35" />
                   <span>Delete All Downloads</span>
                 </button>
@@ -2069,7 +2058,10 @@ export default function InfoView({
 
               {/* Source Provider selector */}
               {details?.provider && (
-                <div className="input-group u-style-38" ref={providerDropdownRef}>
+                <div
+                  className="input-group u-style-38"
+                  ref={providerDropdownRef}
+                >
                   <label className="input-label">Source Provider</label>
                   {details.linkedProviders &&
                   details.linkedProviders.length > 1 ? (
@@ -2174,7 +2166,10 @@ export default function InfoView({
                       className="input-val"
                     />
                   </div>
-                  <div className="input-group u-style-40" ref={malStatusDropdownRef}>
+                  <div
+                    className="input-group u-style-40"
+                    ref={malStatusDropdownRef}
+                  >
                     <label className="input-label">Status</label>
                     <div
                       className={`custom-dropdown-trigger ${isMalStatusDropdownOpen ? "open" : ""}`}
@@ -2220,7 +2215,11 @@ export default function InfoView({
                     )}
                   </button>
                   {malStatus !== "not_in_list" && (
-                    <button onClick={handleMalRemove} disabled={malSyncing} className="btn-unlink u-style-41">
+                    <button
+                      onClick={handleMalRemove}
+                      disabled={malSyncing}
+                      className="btn-unlink u-style-41"
+                    >
                       {malSyncing ? (
                         <Loader2 size={16} className="spin" />
                       ) : (
@@ -2269,79 +2268,38 @@ export default function InfoView({
               )}
             </div>
             {/* Sort Selector */}
-            <div className="input-group u-style-43" ref={sortDropdownRef}>
-              <div className={`${`custom-dropdown-trigger ${isSortDropdownOpen ? "open" : ""} u-style-44`}`} onClick={() => setIsSortDropdownOpen(!isSortDropdownOpen)}>
-                <span className="custom-dropdown-trigger-text">
-                  Sort:{" "}
-                  {sortOrder === "downloaded"
-                    ? "DOWNLOADED"
-                    : sortOrder.toUpperCase()}
-                </span>
-                <ChevronDown className="custom-dropdown-chevron" size={16} />
-              </div>
-
-              {isSortDropdownOpen && (
-                <div className="custom-dropdown-menu u-style-45">
-                  <div
-                    className={`custom-dropdown-item ${sortOrder === "asc" ? "selected" : ""}`}
-                    onClick={() => {
-                      setSortOrder("asc");
-                      localStorage.setItem("info_sort_order", "asc");
-                      setIsSortDropdownOpen(false);
-                      fetch("/api/settings", {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({
-                          infoSortOrder: "asc",
-                        }),
-                      }).catch((e) => console.error(e));
-                      const isAnimePahe =
-                        details?.provider?.toLowerCase() === "animepahe" ||
-                        details?.provider?.toLowerCase() === "pahe";
-                      if (isAnimePahe) {
-                        fetchItems(totalPages);
-                      }
-                    }}
-                  >
-                    Sort: ASC
-                  </div>
-                  <div
-                    className={`custom-dropdown-item ${sortOrder === "desc" ? "selected" : ""}`}
-                    onClick={() => {
-                      setSortOrder("desc");
-                      localStorage.setItem("info_sort_order", "desc");
-                      setIsSortDropdownOpen(false);
-                      fetch("/api/settings", {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({
-                          infoSortOrder: "desc",
-                        }),
-                      }).catch((e) => console.error(e));
-                      const isAnimePahe =
-                        details?.provider?.toLowerCase() === "animepahe" ||
-                        details?.provider?.toLowerCase() === "pahe";
-                      if (isAnimePahe) {
-                        fetchItems(1);
-                      }
-                    }}
-                  >
-                    Sort: DESC
-                  </div>
-                  {hasDownloads && (
-                    <div
-                      className={`custom-dropdown-item ${sortOrder === "downloaded" ? "selected" : ""}`}
-                      onClick={() => {
-                        setSortOrder("downloaded");
-                        setIsSortDropdownOpen(false);
-                      }}
-                    >
-                      Sort: DOWNLOADED
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
+            <Dropdown
+              value={sortOrder}
+              onChange={(newOrder) => {
+                setSortOrder(newOrder);
+                if (newOrder !== "downloaded") {
+                  localStorage.setItem("info_sort_order", newOrder);
+                  fetch("/api/settings", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                      infoSortOrder: newOrder,
+                    }),
+                  }).catch((e) => console.error(e));
+                  const isAnimePahe =
+                    details?.provider?.toLowerCase() === "animepahe" ||
+                    details?.provider?.toLowerCase() === "pahe";
+                  if (isAnimePahe) {
+                    fetchItems(newOrder === "asc" ? totalPages : 1);
+                  }
+                }
+              }}
+              options={[
+                { value: "asc", label: "Sort: ASC" },
+                { value: "desc", label: "Sort: DESC" },
+                ...(hasDownloads
+                  ? [{ value: "downloaded", label: "Sort: DOWNLOADED" }]
+                  : []),
+              ]}
+              className="u-style-43"
+              triggerClassName="u-style-44"
+              menuClassName="u-style-45"
+            />
 
             {/* Action buttons if online provider is available */}
             {details?.provider && details?.provider !== "local source" && (
@@ -2352,40 +2310,17 @@ export default function InfoView({
                   ) ||
                     (details?.DownloadedEpisodes?.dub &&
                       details.DownloadedEpisodes.dub.length > 0)) && (
-                    <div className="input-group u-style-46" ref={dubDropdownRef}>
-                      <div className={`${`custom-dropdown-trigger ${isDubDropdownOpen ? "open" : ""} u-style-44`}`} onClick={() => setIsDubDropdownOpen(!isDubDropdownOpen)}>
-                        <span className="custom-dropdown-trigger-text">
-                          {dubSelect.toUpperCase()}
-                        </span>
-                        <ChevronDown
-                          className="custom-dropdown-chevron"
-                          size={16}
-                        />
-                      </div>
-
-                      {isDubDropdownOpen && (
-                        <div className="custom-dropdown-menu u-style-45">
-                          <div
-                            className={`custom-dropdown-item ${dubSelect === "sub" ? "selected" : ""}`}
-                            onClick={() => {
-                              setDubSelect("sub");
-                              setIsDubDropdownOpen(false);
-                            }}
-                          >
-                            SUB
-                          </div>
-                          <div
-                            className={`custom-dropdown-item ${dubSelect === "dub" ? "selected" : ""}`}
-                            onClick={() => {
-                              setDubSelect("dub");
-                              setIsDubDropdownOpen(false);
-                            }}
-                          >
-                            DUB
-                          </div>
-                        </div>
-                      )}
-                    </div>
+                    <Dropdown
+                      value={dubSelect}
+                      onChange={setDubSelect}
+                      options={[
+                        { value: "sub", label: "SUB" },
+                        { value: "dub", label: "DUB" },
+                      ]}
+                      className="u-style-46"
+                      triggerClassName="u-style-44"
+                      menuClassName="u-style-45"
+                    />
                   )}
                 <button
                   onClick={handleSelectAll}
@@ -2400,7 +2335,10 @@ export default function InfoView({
                   {allSelectableSelected ? "Deselect All" : "Select All"}
                 </button>
                 {selectedItems.size > 0 && (
-                  <button onClick={() => setSelectedItems(new Set())} className="btn-bulk u-style-47">
+                  <button
+                    onClick={() => setSelectedItems(new Set())}
+                    className="btn-bulk u-style-47"
+                  >
                     Clear Selected
                   </button>
                 )}
@@ -2424,8 +2362,28 @@ export default function InfoView({
                     transition: "border-color 0.2s ease, box-shadow 0.2s ease",
                   }}
                 >
-                  <input type="text" placeholder="Range 1-10 / 5" value={rangeInput} onChange={(e) => { const val = e.target.value; setRangeInput(val); setIsRangeInputInvalid(!validateRangeInput(val)); }} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleSelectRange(rangeInput, true); } }} className="input-val u-style-48" />
-                  <button onClick={() => handleSelectRange(rangeInput, true)} className="btn-bulk u-style-49" title="Select range of episodes">
+                  <input
+                    type="text"
+                    placeholder="Range 1-10 / 5"
+                    value={rangeInput}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setRangeInput(val);
+                      setIsRangeInputInvalid(!validateRangeInput(val));
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        handleSelectRange(rangeInput, true);
+                      }
+                    }}
+                    className="input-val u-style-48"
+                  />
+                  <button
+                    onClick={() => handleSelectRange(rangeInput, true)}
+                    className="btn-bulk u-style-49"
+                    title="Select range of episodes"
+                  >
                     Select
                   </button>
                 </div>

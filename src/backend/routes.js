@@ -1441,19 +1441,22 @@ router.post("/api/info/:AnimeManga/:LocalMalProvider", async (req, res) => {
   }
 });
 
-// Fetches Anime Episodes
-router.post("/api/episodes", async (req, res) => {
-  let { id, page, provider } = req.body;
+// Fetches Anime Episodes or Manga Chapters
+router.post("/api/info/items", async (req, res) => {
+  let { id, page, provider, type } = req.body;
   page = parseInt(page ?? 1);
+  const isAnime = type === "Anime";
+  const fetchFunction = isAnime ? fetchEpisode : fetchChapters;
+  const errorName = isAnime ? "Episodes" : "Chapters";
+
   try {
     if (isNaN(page)) throw new Error(`invalid Page '${page}'`);
     if (!id) throw new Error("ID is Missing");
 
     if (provider !== "local source") {
-      const Animeprovider = await providerFetch("Anime", provider ?? null);
-
-      const data = await fetchEpisode(Animeprovider, id, page);
-      if (!data) throw new Error("No Episodes Found");
+      const providerObj = await providerFetch(type, provider ?? null);
+      const data = await fetchFunction(providerObj, id, page);
+      if (!data) throw new Error(`No ${errorName} Found`);
       if (data.hasNextPage === undefined && data.totalPages !== undefined) {
         data.hasNextPage = page < data.totalPages;
       }
@@ -1462,33 +1465,7 @@ router.post("/api/episodes", async (req, res) => {
       return res.json({});
     }
   } catch (err) {
-    logger.error(`Error Fetching '${id}' Episodes page : ${page}:`);
-    logger.error(`Error message: ${err.message}`);
-    logger.error(`Stack trace: ${err.stack}`);
-    return res.json({ error: true, message: err?.message });
-  }
-});
-
-// Fetches Manga Chapters
-router.post("/api/chapters", async (req, res) => {
-  let { id, page, provider } = req.body;
-  page = parseInt(page ?? 1);
-  try {
-    if (!id) throw new Error("ID is Missing");
-
-    if (provider !== "local source") {
-      const Mangaprovider = await providerFetch("Manga", provider ?? null);
-      const data = await fetchChapters(Mangaprovider, id, page);
-      if (!data) throw new Error("No Chapters Found");
-      if (data.hasNextPage === undefined && data.totalPages !== undefined) {
-        data.hasNextPage = page < data.totalPages;
-      }
-      return res.json(data);
-    } else {
-      return res.json({});
-    }
-  } catch (err) {
-    logger.error(`Error Fetching '${id}' Manga Chapters`);
+    logger.error(`Error Fetching '${id}' ${errorName} page : ${page}:`);
     logger.error(`Error message: ${err.message}`);
     logger.error(`Stack trace: ${err.stack}`);
     return res.json({ error: true, message: err?.message });
@@ -2707,123 +2684,27 @@ router.post("/api/cache/clear", async (req, res) => {
   }
 });
 
-// Delete Local Episode
-router.post("/api/local/delete-episode", async (req, res) => {
+async function cleanupEmptyDownloadFolder(folderPath, type, id) {
   try {
-    const { id, epnum, subdub } = req.body;
-    if (!id || !epnum || !subdub) throw new Error("Missing parameters");
-
-    const setting = await settingfetch();
-    const baseDir =
-      setting?.CustomDownloadLocation || (await getDownloadsFolder());
-    let typeDir = path.join(baseDir, "Anime", id);
-
-    if (!fs.existsSync(typeDir)) {
-      const idStripped = id.replace(/-(dub|sub|hsub|both)$/, "");
-      const downloads = global.db
-        .prepare(
-          "SELECT * FROM Anime WHERE id = ? OR id = ? OR id = ? OR id = ? OR id = ?",
-        )
-        .all(
-          `${idStripped}-${subdub}`,
-          id,
-          `${idStripped}-sub`,
-          `${idStripped}-hsub`,
-          idStripped,
-        );
-      if (downloads && downloads.length > 0) {
-        const candidateFolders = new Set();
-        for (const d of downloads) {
-          const fn = d.folder_name || d.title?.replace(/[^a-zA-Z0-9]/g, "_");
-          if (fn) {
-            candidateFolders.add(fn);
-            if (subdub) candidateFolders.add(`${fn}_${subdub}`);
-            for (const s of ["sub", "dub", "hsub"]) {
-              candidateFolders.add(`${fn}_${s}`);
-            }
-          }
-        }
-        const refTitle = downloads[0].title;
-        if (refTitle) {
-          const titleFallback = global.db
-            .prepare("SELECT * FROM Anime WHERE title = ? OR title = ?")
-            .all(refTitle, subdub ? `${refTitle} ${subdub}` : refTitle);
-          for (const d of titleFallback || []) {
-            const fn = d.folder_name || d.title?.replace(/[^a-zA-Z0-9]/g, "_");
-            if (fn) {
-              candidateFolders.add(fn);
-              if (subdub) candidateFolders.add(`${fn}_${subdub}`);
-            }
-          }
-        }
-        let foundFolder = null;
-        for (const candidate of candidateFolders) {
-          if (fs.existsSync(path.join(baseDir, "Anime", candidate))) {
-            foundFolder = candidate;
-            break;
-          }
-        }
-        if (foundFolder) {
-          typeDir = path.join(baseDir, "Anime", foundFolder);
-        } else {
-          const folderName =
-            downloads[0].folder_name ||
-            downloads[0].title?.replace(/[^a-zA-Z0-9]/g, "_");
-          typeDir = path.join(baseDir, "Anime", folderName);
-        }
+    const remaining = await fs.promises.readdir(folderPath);
+    if (remaining.length === 0) {
+      await fs.promises.rmdir(folderPath);
+      logger.info(`Removed empty download folder: ${folderPath}`);
+      if (id) {
+        try {
+          global.db.prepare(`DELETE FROM ${type} WHERE id = ?`).run(id);
+          logger.info(`Cleaned up DB entry for ${type}: ${id}`);
+        } catch (_) {}
       }
     }
+  } catch (_) {}
+}
 
-    if (fs.existsSync(typeDir)) {
-      const files = await fs.promises.readdir(typeDir);
-
-      const filesToDelete = files.filter((file) => {
-        const ext = path.extname(file).toLowerCase();
-        const videoExtensions = [
-          ".mp4",
-          ".mkv",
-          ".webm",
-          ".ts",
-          ".avi",
-          ".mov",
-          ".flv",
-          ".m4v",
-          ".3gp",
-        ];
-        const subExtensions = [".srt", ".vtt", ".ass", ".ssa"];
-        if (!videoExtensions.includes(ext) && !subExtensions.includes(ext)) {
-          return false;
-        }
-        const match = file.match(/^\d+(\.\d+)?/);
-        if (match) {
-          const num = parseFloat(match[0]);
-          return num === parseFloat(epnum);
-        }
-        return false;
-      });
-
-      if (filesToDelete.length > 0) {
-        for (const fileToDelete of filesToDelete) {
-          await fs.promises.unlink(path.join(typeDir, fileToDelete));
-        }
-        return res.json({ error: false, message: "Episode deleted" });
-      } else {
-        throw new Error("Episode file not found");
-      }
-    } else {
-      throw new Error("Anime folder not found on disk");
-    }
-  } catch (err) {
-    logger.error(`Error deleting episode: ${err.message}`);
-    return res.json({ error: true, message: err.message });
-  }
-});
-
-// Delete Multiple Local Episodes or Chapters
-router.post("/api/local/delete-multiple", async (req, res) => {
+// Delete Local Episodes or Chapters
+router.post("/api/local/delete", async (req, res) => {
   try {
-    const { id, type, numbers, subdub } = req.body;
-    if (!id || !type || !numbers || !Array.isArray(numbers)) {
+    const { id, type = "Anime", numbers, subdub } = req.body;
+    if (!id || !numbers || !Array.isArray(numbers) || numbers.length === 0) {
       throw new Error("Missing or invalid parameters");
     }
 
@@ -2834,8 +2715,9 @@ router.post("/api/local/delete-multiple", async (req, res) => {
     let typeDir = path.join(baseDir, type, id);
 
     if (!fs.existsSync(typeDir)) {
+      const idStripped = id.replace(/-(dub|sub|hsub|both)$/, "");
+
       if (type === "Anime") {
-        const idStripped = id.replace(/-(dub|sub|hsub|both)$/, "");
         const downloads = global.db
           .prepare(
             "SELECT * FROM Anime WHERE id = ? OR id = ? OR id = ? OR id = ? OR id = ?",
@@ -2892,7 +2774,7 @@ router.post("/api/local/delete-multiple", async (req, res) => {
       } else {
         const downloads = global.db
           .prepare("SELECT * FROM Manga WHERE id = ? OR id = ?")
-          .all(id, id.replace(/-(dub|sub|hsub|both)$/, ""));
+          .all(id, idStripped);
         if (downloads && downloads.length > 0) {
           const existingDownload = downloads.find((d) => {
             const folderName =
@@ -2913,74 +2795,72 @@ router.post("/api/local/delete-multiple", async (req, res) => {
       }
     }
 
-    if (fs.existsSync(typeDir)) {
-      const files = await fs.promises.readdir(typeDir);
-      let deletedCount = 0;
-
-      for (const num of numbers) {
-        const targetNum = parseFloat(num);
-        if (isNaN(targetNum)) continue;
-
-        const filesToDelete = files.filter((file) => {
-          if (type === "Anime") {
-            const ext = path.extname(file).toLowerCase();
-            const videoExtensions = [
-              ".mp4",
-              ".mkv",
-              ".webm",
-              ".ts",
-              ".avi",
-              ".mov",
-              ".flv",
-              ".m4v",
-              ".3gp",
-            ];
-            const subExtensions = [".srt", ".vtt", ".ass", ".ssa"];
-            if (
-              !videoExtensions.includes(ext) &&
-              !subExtensions.includes(ext)
-            ) {
-              return false;
-            }
-            const match = file.match(/^\d+(\.\d+)?/);
-            if (match) {
-              const fileEpNum = parseFloat(match[0]);
-              return fileEpNum === targetNum;
-            }
-          } else {
-            if (
-              file.toLowerCase().endsWith(".cbz") &&
-              file.toLowerCase().includes("chapter")
-            ) {
-              const match = file.toLowerCase().match(/chapter\s*([\d.]+)/);
-              if (match) {
-                const fileChapNum = parseFloat(match[1]);
-                return fileChapNum === targetNum;
-              }
-            }
-          }
-          return false;
-        });
-
-        for (const fileToDelete of filesToDelete) {
-          try {
-            await fs.promises.unlink(path.join(typeDir, fileToDelete));
-            deletedCount++;
-          } catch (e) {
-            // ignore individual file deletion errors
-          }
-        }
-      }
-
-      return res.json({
-        error: false,
-        message: `Successfully deleted ${deletedCount} files`,
-      });
-    } else {
+    if (!fs.existsSync(typeDir)) {
       throw new Error(`${type} folder not found on disk`);
     }
+
+    const files = await fs.promises.readdir(typeDir);
+    let deletedCount = 0;
+
+    for (const num of numbers) {
+      const targetNum = parseFloat(num);
+      if (isNaN(targetNum)) continue;
+
+      const filesToDelete = files.filter((file) => {
+        if (type === "Anime") {
+          const ext = path.extname(file).toLowerCase();
+          const videoExtensions = [
+            ".mp4",
+            ".mkv",
+            ".webm",
+            ".ts",
+            ".avi",
+            ".mov",
+            ".flv",
+            ".m4v",
+            ".3gp",
+          ];
+          const subExtensions = [".srt", ".vtt", ".ass", ".ssa"];
+          if (!videoExtensions.includes(ext) && !subExtensions.includes(ext)) {
+            return false;
+          }
+          const match = file.match(/^\d+(\.\d+)?/);
+          if (match) {
+            return parseFloat(match[0]) === targetNum;
+          }
+        } else {
+          if (
+            file.toLowerCase().endsWith(".cbz") &&
+            file.toLowerCase().includes("chapter")
+          ) {
+            const match = file.toLowerCase().match(/chapter\s*([\d.]+)/);
+            if (match) {
+              return parseFloat(match[1]) === targetNum;
+            }
+          }
+        }
+        return false;
+      });
+
+      for (const fileToDelete of filesToDelete) {
+        try {
+          await fs.promises.unlink(path.join(typeDir, fileToDelete));
+          deletedCount++;
+        } catch (e) {
+          // ignore individual file deletion errors
+        }
+      }
+    }
+
+    await cleanupEmptyDownloadFolder(typeDir, type, id);
+
+    const label = type === "Anime" ? "episode(s)" : "chapter(s)";
+    return res.json({
+      error: false,
+      message: `Successfully deleted ${deletedCount} ${label}`,
+    });
   } catch (err) {
-    logger.error(`Error in /api/local/delete-multiple: ${err.message}`);
+    logger.error(`Error in /api/local/delete: ${err.message}`);
     return res.json({ error: true, message: err.message });
   }
 });

@@ -61,6 +61,45 @@ function getEpisodeNumberFromFilename(filename) {
   return match ? parseFloat(match[0]) : null;
 }
 
+function getMalIdFromMapping(type, providerName, cleanId) {
+  if (!global.mappingDb || !cleanId) return null;
+  const name = (providerName || "").toLowerCase();
+  try {
+    let row = null;
+    if (type === "Anime") {
+      if (name.includes("pahe")) {
+        row = global.mappingDb
+          .prepare(
+            "SELECT malid FROM animepahe WHERE id = ? OR uuid = ? LIMIT 1",
+          )
+          .get(cleanId, cleanId);
+      } else if (name.includes("anikoto")) {
+        row = global.mappingDb
+          .prepare("SELECT malid FROM anikototv WHERE id = ? LIMIT 1")
+          .get(cleanId);
+      } else if (name.includes("anineko")) {
+        row = global.mappingDb
+          .prepare("SELECT malid FROM anineko WHERE id = ? LIMIT 1")
+          .get(cleanId);
+      }
+    } else if (type === "Manga") {
+      if (name.includes("weebcentral")) {
+        row = global.mappingDb
+          .prepare("SELECT malid FROM weebcentral WHERE id = ? LIMIT 1")
+          .get(cleanId);
+      } else if (name.includes("allmanga")) {
+        row = global.mappingDb
+          .prepare("SELECT malid FROM allmanga WHERE id = ? LIMIT 1")
+          .get(cleanId);
+      }
+    }
+    return row?.malid || null;
+  } catch (e) {
+    logger.error(`Error in getMalIdFromMapping: ${e.message}`);
+    return null;
+  }
+}
+
 // Add metadata
 async function MetadataAdd(type, valuesToAdd) {
   if (!tables[type] || !valuesToAdd?.id) {
@@ -78,38 +117,10 @@ async function MetadataAdd(type, valuesToAdd) {
         valuesToAdd.MalID = customMappingRow.malid
           ? String(customMappingRow.malid)
           : null;
-      } else if (global.mappingDb && cleanId) {
-        const providerName = (valuesToAdd.provider || "").toLowerCase();
-        let match = null;
-        if (type === "Anime") {
-          if (providerName.includes("pahe")) {
-            match = global.mappingDb
-              .prepare(
-                "SELECT malid FROM animepahe WHERE id = ? OR uuid = ? LIMIT 1",
-              )
-              .get(cleanId, cleanId);
-          } else if (providerName.includes("anikoto")) {
-            match = global.mappingDb
-              .prepare("SELECT malid FROM anikototv WHERE id = ? LIMIT 1")
-              .get(cleanId);
-          } else if (providerName.includes("anineko")) {
-            match = global.mappingDb
-              .prepare("SELECT malid FROM anineko WHERE id = ? LIMIT 1")
-              .get(cleanId);
-          }
-        } else if (type === "Manga") {
-          if (providerName.includes("weebcentral")) {
-            match = global.mappingDb
-              .prepare("SELECT malid FROM weebcentral WHERE id = ? LIMIT 1")
-              .get(cleanId);
-          } else if (providerName.includes("allmanga")) {
-            match = global.mappingDb
-              .prepare("SELECT malid FROM allmanga WHERE id = ? LIMIT 1")
-              .get(cleanId);
-          }
-        }
-        if (match?.malid) {
-          valuesToAdd.MalID = String(match.malid);
+      } else {
+        const malId = getMalIdFromMapping(type, valuesToAdd.provider, cleanId);
+        if (malId) {
+          valuesToAdd.MalID = String(malId);
         }
       }
     } catch (e) {
@@ -955,11 +966,31 @@ async function getAllMetadata(type, baseDir, page = 1, tag = null) {
       }),
     );
 
+    let finalResults = updatedMetadata.filter(Boolean);
+
+    if (tag && tag.toLowerCase() === "downloads") {
+      finalResults = finalResults.filter((item) => {
+        if (item.Downloaded && item.Downloaded.length > 0) return true;
+        if (item.CustomTag) {
+          try {
+            const parsed = JSON.parse(item.CustomTag);
+            if (Array.isArray(parsed)) {
+              return parsed.some((t) => t && t.toLowerCase() === "downloads");
+            }
+            return String(parsed).toLowerCase() === "downloads";
+          } catch (_) {
+            return item.CustomTag.toLowerCase().includes("downloads");
+          }
+        }
+        return false;
+      });
+    }
+
     return {
       totalPages,
       currentPage: page,
       hasNextPage,
-      results: updatedMetadata.filter(Boolean),
+      results: finalResults,
     };
   } catch (err) {
     throw new Error(`Error fetching metadata: ${err.message}`);
