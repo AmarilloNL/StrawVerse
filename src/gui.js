@@ -591,23 +591,48 @@ app.on("will-quit", () => {
 });
 
 // AutoUpdater
+autoUpdater.autoDownload = false;
+autoUpdater.autoInstallOnAppQuit = true;
+
 autoUpdater.on("checking-for-update", () => {
   logger.info("Checking for updates...");
 });
 
 autoUpdater.on("update-not-available", () => {
   logger.info("No updates available");
+  if (global.win) {
+    global.win.webContents.send("update-not-available");
+  }
 });
 
-autoUpdater.on("update-available", () => {
-  logger.info("Update available. Downloading...");
+autoUpdater.on("update-available", (info) => {
+  logger.info("Update available: " + (info?.version || "unknown"));
   if (global.win) {
-    global.win.webContents.send("update-available");
+    global.win.webContents.send("update-available", {
+      version: info?.version,
+      releaseNotes: info?.releaseNotes,
+    });
+  }
+});
+
+autoUpdater.on("download-progress", (progress) => {
+  if (global.win) {
+    global.win.webContents.send("update-download-progress", {
+      percent: Math.round(progress.percent),
+      transferred: progress.transferred,
+      total: progress.total,
+      bytesPerSecond: progress.bytesPerSecond,
+    });
   }
 });
 
 autoUpdater.on("error", (err) => {
   logger.error("Error checking for updates:", err);
+  if (global.win) {
+    global.win.webContents.send("update-error", {
+      message: err?.message || "Unknown error",
+    });
+  }
 });
 
 autoUpdater.on("update-downloaded", () => {
@@ -615,30 +640,32 @@ autoUpdater.on("update-downloaded", () => {
   if (global.win) {
     global.win.webContents.send("update-downloaded");
   }
-  const choice = dialog.showMessageBoxSync(global.win, {
-    type: "question",
-    buttons: ["Restart", "Later"],
-    defaultId: 0,
-    cancelId: 1,
-    title: "Update Ready",
-    message:
-      "A new version has been downloaded. Would you like to restart the app to apply the update?",
-  });
+});
 
-  if (choice === 0) {
-    autoUpdater.quitAndInstall();
+ipcMain.handle("check-for-update", async () => {
+  try {
+    const result = await autoUpdater.checkForUpdates();
+    return { success: true, version: result?.updateInfo?.version };
+  } catch (err) {
+    return { success: false, error: err.message };
   }
 });
 
-autoUpdater.on("update-installed", () => {
-  const version = app.getVersion();
+ipcMain.handle("download-update", async () => {
+  try {
+    await autoUpdater.downloadUpdate();
+    return { success: true };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+});
 
-  const notification = new Notification({
-    title: "StrawVerse",
-    body: `StrawVerse ${version} has been successfully installed!`,
-  });
+ipcMain.handle("install-update", () => {
+  autoUpdater.quitAndInstall();
+});
 
-  notification.show();
+ipcMain.handle("get-app-version", () => {
+  return app.getVersion();
 });
 
 // Find Free Port

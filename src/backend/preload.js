@@ -24,4 +24,8 @@ contextBridge.exposeInMainWorld("sharedStateAPI", {
     ipcRenderer.invoke("update-setting", key, value),
   updateSettings: (settingsObj) =>
     ipcRenderer.invoke("update-settings", settingsObj),
+  checkForUpdate: () => ipcRenderer.invoke("check-for-update"),
+  downloadUpdate: () => ipcRenderer.invoke("download-update"),
+  installUpdate: () => ipcRenderer.invoke("install-update"),
+  getAppVersion: () => ipcRenderer.invoke("get-app-version"),
 });

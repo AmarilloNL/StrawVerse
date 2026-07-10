@@ -48,6 +48,7 @@ export default function SettingsView({
   const [mangaReaderWidth, setMangaReaderWidth] = useState(800);
   const [cacheStats, setCacheStats] = useState(null);
   const [clearingCache, setClearingCache] = useState(false);
+  const [appVersion, setAppVersion] = useState("");
   const getProviderIcon = (name, type) => {
     if (!name || !settings?.installedExtensions) return null;
     const list =
@@ -267,6 +268,9 @@ export default function SettingsView({
         const widthVal = parseInt(s.mangaReaderWidth, 10) || 800;
         setMangaReaderWidth(widthVal);
         localStorage.setItem("manga_reader_width", widthVal);
+        if (window.sharedStateAPI && window.sharedStateAPI.getAppVersion) {
+          window.sharedStateAPI.getAppVersion().then(setAppVersion);
+        }
       }
 
       setHasChanges(false);
@@ -517,6 +521,202 @@ export default function SettingsView({
       swalError("Error", err.message || "An error occurred.");
     } finally {
       setClearingCache(false);
+    }
+  };
+
+  const handleCheckForUpdates = async () => {
+    Swal.fire({
+      title: "Checking for updates...",
+      text: "Please wait while we check the registry.",
+      allowOutsideClick: false,
+      background: "var(--bg-secondary)",
+      color: "var(--text-main)",
+      didOpen: () => {
+        Swal.showLoading();
+      },
+    });
+
+    try {
+      const updateListener = window.sharedStateAPI.on(
+        "update-available",
+        (info) => {
+          const targetVersion = info?.version || "New Version";
+          Swal.fire({
+            title: "Update Available!",
+            text: `A new version (v${targetVersion}) is available. Would you like to download it?`,
+            icon: "info",
+            showCancelButton: true,
+            confirmButtonText: "Download & Install",
+            cancelButtonText: "Later",
+            confirmButtonColor: "var(--accent)",
+            cancelButtonColor: "var(--bg-tertiary)",
+            background: "var(--bg-secondary)",
+            color: "var(--text-main)",
+          }).then(async (result) => {
+            if (result.isConfirmed) {
+              Swal.fire({
+                title: "Downloading Update...",
+                html: `
+                <div style="margin: 15px 0;">
+                  <div style="background: var(--bg-tertiary); border-radius: 4px; height: 10px; overflow: hidden; width: 100%;">
+                    <div id="update-progress-bar" style="background: var(--accent); height: 100%; width: 0%; transition: width 0.2s ease;"></div>
+                  </div>
+                  <div style="display: flex; justify-content: space-between; margin-top: 8px; font-size: 13px; color: var(--text-muted);">
+                    <span id="update-progress-percent">0%</span>
+                    <span id="update-progress-speed">0 MB/s</span>
+                  </div>
+                </div>
+              `,
+                allowOutsideClick: false,
+                showConfirmButton: false,
+                background: "var(--bg-secondary)",
+                color: "var(--text-main)",
+                didOpen: () => {
+                  Swal.showLoading();
+                },
+              });
+
+              const progressListener = window.sharedStateAPI.on(
+                "update-download-progress",
+                (progress) => {
+                  const bar = document.getElementById("update-progress-bar");
+                  const text = document.getElementById(
+                    "update-progress-percent",
+                  );
+                  const speed = document.getElementById(
+                    "update-progress-speed",
+                  );
+                  if (bar) bar.style.width = `${progress.percent}%`;
+                  if (text) text.innerText = `${progress.percent}%`;
+                  if (speed) {
+                    const mbSpeed = (
+                      progress.bytesPerSecond /
+                      (1024 * 1024)
+                    ).toFixed(2);
+                    speed.innerText = `${mbSpeed} MB/s`;
+                  }
+                },
+              );
+
+              const downloadedListener = window.sharedStateAPI.on(
+                "update-downloaded",
+                () => {
+                  progressListener();
+                  downloadedListener();
+                  errorListener();
+
+                  Swal.fire({
+                    title: "Update Ready!",
+                    text: "A new version has been downloaded. Would you like to restart the application now to apply the update?",
+                    icon: "success",
+                    showCancelButton: true,
+                    confirmButtonText: "Restart Now",
+                    cancelButtonText: "Later",
+                    confirmButtonColor: "var(--accent)",
+                    cancelButtonColor: "var(--bg-tertiary)",
+                    background: "var(--bg-secondary)",
+                    color: "var(--text-main)",
+                  }).then((restartResult) => {
+                    if (restartResult.isConfirmed) {
+                      window.sharedStateAPI.installUpdate();
+                    }
+                  });
+                },
+              );
+
+              const errorListener = window.sharedStateAPI.on(
+                "update-error",
+                (err) => {
+                  progressListener();
+                  downloadedListener();
+                  errorListener();
+                  Swal.fire({
+                    title: "Download Failed",
+                    text: err.message || "Failed to download the update.",
+                    icon: "error",
+                    confirmButtonColor: "var(--accent)",
+                    background: "var(--bg-secondary)",
+                    color: "var(--text-main)",
+                  });
+                },
+              );
+
+              const res = await window.sharedStateAPI.downloadUpdate();
+              if (!res.success) {
+                progressListener();
+                downloadedListener();
+                errorListener();
+                Swal.fire({
+                  title: "Download Failed",
+                  text: res.error || "Could not trigger update download.",
+                  icon: "error",
+                  confirmButtonColor: "var(--accent)",
+                  background: "var(--bg-secondary)",
+                  color: "var(--text-main)",
+                });
+              }
+            }
+          });
+          updateListener();
+          noUpdateListener();
+          errorListener();
+        },
+      );
+
+      const noUpdateListener = window.sharedStateAPI.on(
+        "update-not-available",
+        () => {
+          Swal.fire({
+            title: "Up to Date",
+            text: "You are already using the latest version of StrawVerse.",
+            icon: "success",
+            confirmButtonColor: "var(--accent)",
+            background: "var(--bg-secondary)",
+            color: "var(--text-main)",
+          });
+          updateListener();
+          noUpdateListener();
+          errorListener();
+        },
+      );
+
+      const errorListener = window.sharedStateAPI.on("update-error", (err) => {
+        Swal.fire({
+          title: "Update Error",
+          text: err.message || "Failed to check for updates.",
+          icon: "error",
+          confirmButtonColor: "var(--accent)",
+          background: "var(--bg-secondary)",
+          color: "var(--text-main)",
+        });
+        updateListener();
+        noUpdateListener();
+        errorListener();
+      });
+
+      const res = await window.sharedStateAPI.checkForUpdate();
+      if (!res.success) {
+        updateListener();
+        noUpdateListener();
+        errorListener();
+        Swal.fire({
+          title: "Check Failed",
+          text: res.error || "Failed to check for updates.",
+          icon: "error",
+          confirmButtonColor: "var(--accent)",
+          background: "var(--bg-secondary)",
+          color: "var(--text-main)",
+        });
+      }
+    } catch (e) {
+      Swal.fire({
+        title: "Error",
+        text: e.message || "An unexpected error occurred.",
+        icon: "error",
+        confirmButtonColor: "var(--accent)",
+        background: "var(--bg-secondary)",
+        color: "var(--text-main)",
+      });
     }
   };
 
@@ -1434,6 +1634,33 @@ export default function SettingsView({
                   terms of service. The developers assume no liability for
                   misuse, copyright violations, or data download charges.
                 </p>
+              </div>
+
+              <div
+                style={{
+                  marginTop: "24px",
+                  paddingTop: "20px",
+                  borderTop: "1px solid var(--border)",
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                }}
+              >
+                <span style={{ color: "var(--text-muted)", fontSize: "14px" }}>
+                  Version: <strong>v{appVersion || "8.0.2"}</strong>
+                </span>
+                <button
+                  type="button"
+                  onClick={handleCheckForUpdates}
+                  className="btn-reinstall"
+                  style={{
+                    padding: "8px 16px",
+                    borderRadius: "8px",
+                    fontWeight: "600",
+                  }}
+                >
+                  Check for Updates
+                </button>
               </div>
             </div>
           )}
