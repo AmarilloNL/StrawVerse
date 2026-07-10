@@ -51,22 +51,59 @@ log "Found StrawVerse version ${BOLD}${VERSION}${NC}"
 # Directories
 BIN_DIR="${HOME}/.local/bin"
 ICON_DIR="${HOME}/.local/share/icons"
-APP_DIR="${HOME}/.local/share/applications"
+MENU_DIR="${HOME}/.local/share/applications"
+APP_DIR="${HOME}/.local/share/strawverse"
 
 log "Creating directories..."
 mkdir -p "$BIN_DIR"
 mkdir -p "$ICON_DIR"
+mkdir -p "$MENU_DIR"
 mkdir -p "$APP_DIR"
 ok "Directories created or verified."
 
 # Download AppImage
-TARGET_BIN="${BIN_DIR}/strawverse"
+TARGET_APPIMAGE="${APP_DIR}/StrawVerse.AppImage"
 log "Downloading StrawVerse AppImage from: ${CYAN}${APPIMAGE_URL}${NC}"
-if ! curl -L -# -o "$TARGET_BIN" "$APPIMAGE_URL"; then
+if ! curl -L -# -o "$TARGET_APPIMAGE" "$APPIMAGE_URL"; then
     error "Failed to download AppImage."
 fi
-chmod +x "$TARGET_BIN"
-ok "AppImage downloaded and made executable at: ${BOLD}${TARGET_BIN}${NC}"
+chmod +x "$TARGET_APPIMAGE"
+ok "AppImage downloaded to: ${BOLD}${TARGET_APPIMAGE}${NC}"
+
+# Verify FUSE compatibility
+log "Checking system FUSE compatibility..."
+FUSE_COMPATIBLE=true
+TEST_RUN=$("$TARGET_APPIMAGE" --appimage-version 2>&1 || true)
+if [[ "$TEST_RUN" == *"error loading libfuse.so.2"* ]] || [[ "$TEST_RUN" == *"require FUSE"* ]]; then
+    FUSE_COMPATIBLE=false
+fi
+
+TARGET_BIN="${BIN_DIR}/strawverse"
+
+if [ "$FUSE_COMPATIBLE" = true ]; then
+    log "System is FUSE compatible. Linking AppImage directly..."
+    ln -sf "$TARGET_APPIMAGE" "$TARGET_BIN"
+    ok "Linked AppImage to: ${BOLD}${TARGET_BIN}${NC}"
+else
+    warn "FUSE (libfuse.so.2) is not installed on your system."
+    log "Extracting AppImage contents for FUSE-less execution..."
+    
+    # Remove old extraction folder if it exists
+    rm -rf "${APP_DIR}/squashfs-root"
+    
+    # Extract AppImage
+    if (cd "$APP_DIR" && "$TARGET_APPIMAGE" --appimage-extract > /dev/null); then
+        if [ -f "${APP_DIR}/squashfs-root/AppRun" ]; then
+            chmod +x "${APP_DIR}/squashfs-root/AppRun"
+            ln -sf "${APP_DIR}/squashfs-root/AppRun" "$TARGET_BIN"
+            ok "AppImage extracted and linked to: ${BOLD}${TARGET_BIN}${NC}"
+        else
+            error "Extraction finished but AppRun binary was not found."
+        fi
+    else
+        error "Failed to extract AppImage."
+    fi
+fi
 
 # Download Icon
 ICON_URL="https://raw.githubusercontent.com/${REPO}/main/src/assets/luffy.png"
@@ -79,7 +116,7 @@ else
 fi
 
 # Create desktop entry
-DESKTOP_FILE="${APP_DIR}/strawverse.desktop"
+DESKTOP_FILE="${MENU_DIR}/strawverse.desktop"
 log "Creating desktop entry at: ${BOLD}${DESKTOP_FILE}${NC}"
 cat <<EOF > "$DESKTOP_FILE"
 [Desktop Entry]
